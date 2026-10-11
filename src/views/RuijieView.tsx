@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Customer, RuijieConfig, RuijieDevice } from '../types';
+import { useAuth } from '../context/AuthContext';
 import {
   Server,
   ShieldAlert,
@@ -15,11 +16,13 @@ import {
   Key,
   Globe,
   Sliders,
-  Send
+  Send,
+  Network
 } from 'lucide-react';
 import { RuijieService, RuijieExecutionLog } from '../services/ruijieService';
 import { DataService } from '../services/dataService';
 import { WhatsAppService } from '../services/whatsappService';
+import { NetworkTopologyView } from '../components/NetworkTopologyView';
 
 interface RuijieViewProps {
   devices: RuijieDevice[];
@@ -32,6 +35,9 @@ export const RuijieView: React.FC<RuijieViewProps> = ({
   customers,
   onRefreshData
 }) => {
+  const { currentUser } = useAuth();
+  const isSuperadmin = currentUser?.role === 'superadmin';
+
   const [config, setConfig] = useState<RuijieConfig>(() => DataService.getRuijieConfig());
   const [logs, setLogs] = useState<RuijieExecutionLog[]>(() => RuijieService.getLogs());
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; latency?: number } | null>(null);
@@ -98,24 +104,45 @@ export const RuijieView: React.FC<RuijieViewProps> = ({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-zinc-800">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Server className="w-6 h-6 text-red-500" />
-            Integrasi Ruijie Reyee & Auto Isolir
-          </h1>
-          <p className="text-xs sm:text-sm text-zinc-400">
-            Otomasi isolir pelanggan tertunggak, sinkronisasi profil hotspot voucher, dan pemantauan gateway.
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+              {isSuperadmin ? (
+                <>
+                  <Server className="w-6 h-6 text-red-500" />
+                  <span>Integrasi Ruijie Reyee & Auto Isolir</span>
+                </>
+              ) : (
+                <>
+                  <ShieldAlert className="w-6 h-6 text-red-500" />
+                  <span>Manajemen Isolir & Auto Isolir Pelanggan</span>
+                </>
+              )}
+            </h1>
+            <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+              isSuperadmin ? 'bg-red-950 text-red-400 border border-red-900' : 'bg-zinc-800 text-zinc-300 border border-zinc-700'
+            }`}>
+              {isSuperadmin ? 'Superadmin Full Access' : 'Admin Operator'}
+            </span>
+          </div>
+          <p className="text-xs sm:text-sm text-zinc-400 mt-0.5">
+            {isSuperadmin
+              ? 'Konfigurasi integrasi Ruijie Cloud OpenAPI, otomasi isolir jatuh tempo, sinkronisasi profil hotspot voucher, dan pemantauan gateway.'
+              : 'Fitur eksekusi isolir manual & auto isolir pelanggan tertunggak via gateway Ruijie Reyee.'}
           </p>
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button
-            onClick={handleSyncVouchers}
-            disabled={isSyncing}
-            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:bg-zinc-800 transition-colors shadow-sm"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-red-500 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>Sinkron Voucher ke Ruijie</span>
-          </button>
+          {isSuperadmin && (
+            <button
+              onClick={handleSyncVouchers}
+              disabled={isSyncing}
+              className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:bg-zinc-800 transition-colors shadow-sm"
+              title="Sinkronisasi kode voucher hotspot ke Cloud Ruijie Reyee"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-red-500 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>Sinkron Voucher ke Ruijie</span>
+            </button>
+          )}
 
           <button
             onClick={handleRunAutoIsolirNow}
@@ -133,6 +160,14 @@ export const RuijieView: React.FC<RuijieViewProps> = ({
           <span>{actionNotice}</span>
         </div>
       )}
+
+      {/* Visual Topology Representation */}
+      <NetworkTopologyView
+        devices={devices}
+        config={config}
+        onRefresh={onRefreshData}
+        isLiveConnected={true}
+      />
 
       {/* Hardware Monitoring Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -250,74 +285,91 @@ export const RuijieView: React.FC<RuijieViewProps> = ({
             </form>
           </div>
 
-          {/* Cloud API Credentials */}
-          <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-3 text-xs">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Key className="w-4 h-4 text-red-500" />
-              Kredensial Ruijie Reyee Cloud API (App ID & Secret Key)
-            </h3>
-
-            <div>
-              <label className="block text-zinc-400 mb-1">Ruijie App ID</label>
-              <input
-                type="text"
-                placeholder="rj_app_anuwani_882910398"
-                value={config.appId || config.apiKey || ''}
-                onChange={e => setConfig({ ...config, appId: e.target.value, apiKey: e.target.value })}
-                className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-zinc-400 mb-1">Ruijie Secret Key</label>
-              <input
-                type="password"
-                placeholder="rj_sec_778120392819039129x88a"
-                value={config.secretKey || config.apiSecret || ''}
-                onChange={e => setConfig({ ...config, secretKey: e.target.value, apiSecret: e.target.value })}
-                className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-zinc-400 mb-1">Cloud Open API URL</label>
-              <input
-                type="text"
-                value={config.cloudUrl}
-                onChange={e => setConfig({ ...config, cloudUrl: e.target.value })}
-                className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-zinc-400 mb-1">Site ID</label>
-              <input
-                type="text"
-                value={config.siteId}
-                onChange={e => setConfig({ ...config, siteId: e.target.value })}
-                className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px]"
-              />
-            </div>
-
-            <div className="pt-2 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleTestConnection}
-                disabled={isTesting}
-                className="flex-1 py-1.5 rounded-lg bg-zinc-800 text-white hover:bg-zinc-700 transition-colors font-medium text-xs flex items-center justify-center gap-1.5"
-              >
-                {isTesting ? 'Mengetes...' : 'Test Koneksi Ruijie Cloud'}
-              </button>
-            </div>
-
-            {testResult && (
-              <div className={`p-2 rounded-lg text-[11px] font-mono ${
-                testResult.success ? 'bg-emerald-950/60 border border-emerald-800 text-emerald-300' : 'bg-red-950/60 border border-red-800 text-red-300'
-              }`}>
-                {testResult.message} {testResult.latency ? `(${testResult.latency} ms)` : ''}
+          {/* Cloud API Credentials (Superadmin Only) */}
+          {isSuperadmin ? (
+            <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-3 text-xs">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Key className="w-4 h-4 text-red-500" />
+                  Kredensial Ruijie Reyee Cloud API (App ID & Secret Key)
+                </h3>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-red-950 text-red-400 border border-red-900">
+                  Superadmin
+                </span>
               </div>
-            )}
-          </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1">Ruijie App ID</label>
+                <input
+                  type="text"
+                  placeholder="rj_app_anuwani_882910398"
+                  value={config.appId || config.apiKey || ''}
+                  onChange={e => setConfig({ ...config, appId: e.target.value, apiKey: e.target.value })}
+                  className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1">Ruijie Secret Key</label>
+                <input
+                  type="password"
+                  placeholder="rj_sec_778120392819039129x88a"
+                  value={config.secretKey || config.apiSecret || ''}
+                  onChange={e => setConfig({ ...config, secretKey: e.target.value, apiSecret: e.target.value })}
+                  className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1">Cloud Open API URL</label>
+                <input
+                  type="text"
+                  value={config.cloudUrl}
+                  onChange={e => setConfig({ ...config, cloudUrl: e.target.value })}
+                  className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1">Site ID</label>
+                <input
+                  type="text"
+                  value={config.siteId}
+                  onChange={e => setConfig({ ...config, siteId: e.target.value })}
+                  className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px]"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={isTesting}
+                  className="flex-1 py-1.5 rounded-lg bg-zinc-800 text-white hover:bg-zinc-700 transition-colors font-medium text-xs flex items-center justify-center gap-1.5"
+                >
+                  {isTesting ? 'Mengetes...' : 'Test Koneksi Ruijie Cloud'}
+                </button>
+              </div>
+
+              {testResult && (
+                <div className={`p-2 rounded-lg text-[11px] font-mono ${
+                  testResult.success ? 'bg-emerald-950/60 border border-emerald-800 text-emerald-300' : 'bg-red-950/60 border border-red-800 text-red-300'
+                }`}>
+                  {testResult.message} {testResult.latency ? `(${testResult.latency} ms)` : ''}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-4 rounded-xl bg-zinc-900/40 border border-zinc-800 text-xs space-y-2 text-zinc-400">
+              <div className="flex items-center gap-2 text-zinc-200 font-semibold">
+                <Key className="w-4 h-4 text-zinc-500" />
+                <span>Pengaturan API Ruijie Dibatasi</span>
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                Menu konfigurasi integrasi Ruijie (App ID, Secret Key, dan Cloud URL) hanya tersedia untuk peran <strong>Superadmin</strong>. Akun Operator Admin hanya dapat mengeksekusi <strong>Isolir Manual</strong> dan <strong>Auto Isolir</strong>.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Right Column: Fast Isolir Control & Live Execution Logs (7 cols) */}

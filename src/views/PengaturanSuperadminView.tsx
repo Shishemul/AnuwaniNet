@@ -16,7 +16,9 @@ import {
   getStoredSupabaseConfig,
   saveStoredSupabaseConfig,
   testSupabaseConnection,
-  SUPABASE_SQL_SCHEMA
+  SUPABASE_SQL_SCHEMA,
+  executeDatabaseBackup,
+  getDatabaseBackupLogs
 } from '../services/supabaseService';
 import {
   Settings,
@@ -38,8 +40,16 @@ import {
   ShieldAlert,
   Zap,
   Radio,
-  Send
+  Send,
+  Download,
+  HardDriveDownload,
+  Clock,
+  Archive,
+  FileText,
+  BookOpen
 } from 'lucide-react';
+import { WhatsAppTemplateModal } from '../components/modals/WhatsAppTemplateModal';
+import { HostingTutorialSection } from '../components/HostingTutorialSection';
 
 interface PengaturanSuperadminViewProps {
   onOpenDanaCheckout?: (session: DanaPaymentSession) => void;
@@ -53,7 +63,7 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
   const { currentUser } = useAuth();
 
   // Tab inside unified settings
-  const [activeSection, setActiveSection] = useState<'app' | 'ruijie' | 'dana' | 'whatsapp'>('app');
+  const [activeSection, setActiveSection] = useState<'app' | 'ruijie' | 'dana' | 'whatsapp' | 'tutorial'>('app');
 
   // States
   const [appSettings, setAppSettings] = useState<AppSettings>(() => DataService.getAppSettings());
@@ -75,6 +85,14 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
   const [isTestingSupabase, setIsTestingSupabase] = useState(false);
   const [isLoadingFromDb, setIsLoadingFromDb] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
+
+  // Database Backup States
+  const [backupLogs, setBackupLogs] = useState(() => getDatabaseBackupLogs());
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [backupNotice, setBackupNotice] = useState<string | null>(null);
+
+  // Template Manager Modal State
+  const [showTemplateManager, setShowTemplateManager] = useState(false);
 
   // Security guard: Only Superadmin
   if (currentUser?.role !== 'superadmin') {
@@ -190,6 +208,24 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
     setTimeout(() => setCopiedSql(false), 3000);
   };
 
+  const handleBackupNow = async (downloadFile: boolean = true) => {
+    setIsBackingUp(true);
+    setBackupNotice(null);
+    const result = await executeDatabaseBackup('manual', downloadFile);
+    setIsBackingUp(false);
+    setBackupLogs(getDatabaseBackupLogs());
+    setBackupNotice(result.message);
+    setSupabaseConfig(getStoredSupabaseConfig());
+    setTimeout(() => setBackupNotice(null), 5000);
+  };
+
+  const handleSaveBackupSchedule = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveStoredSupabaseConfig(supabaseConfig);
+    setBackupNotice('Jadwal dan konfigurasi pencadangan otomatis berhasil disimpan!');
+    setTimeout(() => setBackupNotice(null), 4000);
+  };
+
   const handleTestDanaSession = () => {
     if (!onOpenDanaCheckout) return;
     const sess = DanaService.createPaymentSession({
@@ -240,8 +276,8 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
         </div>
       )}
 
-      {/* 4-Tab Section Selector */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 p-1.5 rounded-xl bg-zinc-900 border border-zinc-800">
+      {/* 5-Tab Section Selector */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 p-1.5 rounded-xl bg-zinc-900 border border-zinc-800">
         <button
           onClick={() => setActiveSection('app')}
           className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-2 ${
@@ -288,6 +324,18 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
         >
           <Smartphone className="w-4 h-4 text-emerald-400" />
           <span>WhatsApp Bot</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSection('tutorial')}
+          className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-2 col-span-2 sm:col-span-1 ${
+            activeSection === 'tutorial'
+              ? 'bg-amber-600 text-white shadow-md shadow-amber-950 font-bold'
+              : 'text-amber-400/90 hover:text-amber-300 hover:bg-amber-950/40 border border-amber-900/40'
+          }`}
+        >
+          <BookOpen className="w-4 h-4 text-amber-400" />
+          <span>Tutorial Hosting</span>
         </button>
       </div>
 
@@ -440,6 +488,135 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
               </div>
               <div className="p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 max-h-24 overflow-y-auto font-mono text-[10px] text-zinc-500 whitespace-pre">
                 {SUPABASE_SQL_SCHEMA.slice(0, 300)}...
+              </div>
+            </div>
+          </div>
+
+          {/* Fitur Pencadangan Database Terjadwal & Tombol 'Backup Now' */}
+          <div className="lg:col-span-2 p-5 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-4 text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-zinc-800/80">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Archive className="w-4 h-4 text-red-500" />
+                  <span>Fitur Pencadangan Database Berkala (Recurring Backup & Export)</span>
+                </h3>
+                <p className="text-zinc-400 text-[11px] mt-0.5">
+                  Memicu ekspor berkala dan terjadwal untuk tabel inti: <strong>Pelanggan (Customers)</strong>, <strong>Transaksi Keuangan</strong>, <strong>Tagihan (Bills)</strong>, dan <strong>Voucher Hotspot</strong>.
+                </p>
+              </div>
+
+              {/* Tombol Manual 'Backup Now' */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleBackupNow(true)}
+                  disabled={isBackingUp}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold transition-colors shadow-sm shadow-red-950"
+                  title="Ekspor seluruh tabel database sekarang dan unduh file JSON"
+                >
+                  <HardDriveDownload className={`w-4 h-4 ${isBackingUp ? 'animate-bounce' : ''}`} />
+                  <span>{isBackingUp ? 'Mencadangkan...' : 'Backup Now (Unduh Cadangan)'}</span>
+                </button>
+              </div>
+            </div>
+
+            {backupNotice && (
+              <div className="p-3 rounded-lg bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-xs flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 shrink-0 text-emerald-400" />
+                <span>{backupNotice}</span>
+              </div>
+            )}
+
+            {/* Form Pengaturan Recurring / Scheduled Backup */}
+            <form onSubmit={handleSaveBackupSchedule} className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+              <div>
+                <label className="block text-zinc-400 mb-1">Interval Pencadangan Terjadwal</label>
+                <select
+                  value={supabaseConfig.backupIntervalHours || 24}
+                  onChange={e => setSupabaseConfig({
+                    ...supabaseConfig,
+                    backupIntervalHours: parseInt(e.target.value) || 24
+                  })}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono focus:border-red-600 focus:outline-none"
+                >
+                  <option value={6}>Setiap 6 Jam (Sangat Intensif)</option>
+                  <option value={12}>Setiap 12 Jam (Dua Kali Sehari)</option>
+                  <option value={24}>Setiap 24 Jam / 1 Hari (Rekomendasi)</option>
+                  <option value={48}>Setiap 48 Jam (Dua Hari)</option>
+                  <option value={168}>Setiap 7 Hari (Mingguan)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1">Status Auto-Backup Terjadwal</label>
+                <div className="flex items-center gap-2 pt-2">
+                  <input
+                    type="checkbox"
+                    id="autoBackupCheck"
+                    checked={supabaseConfig.autoBackupEnabled !== false}
+                    onChange={e => setSupabaseConfig({
+                      ...supabaseConfig,
+                      autoBackupEnabled: e.target.checked
+                    })}
+                    className="w-4 h-4 rounded text-red-600 bg-zinc-950 border-zinc-800"
+                  />
+                  <label htmlFor="autoBackupCheck" className="text-zinc-300 select-none">
+                    Aktifkan Jadwal Recurring Ekspor
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-end">
+                <button
+                  type="submit"
+                  className="w-full py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-semibold transition-colors"
+                >
+                  Simpan Preferensi Jadwal
+                </button>
+              </div>
+            </form>
+
+            {/* Riwayat / Log File Cadangan Terakhir */}
+            <div className="pt-2 border-t border-zinc-800/80 space-y-2">
+              <div className="flex items-center justify-between text-zinc-400">
+                <span className="font-semibold text-zinc-300 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-zinc-400" />
+                  Riwayat Ekspor Cadangan Database:
+                </span>
+                <span className="text-[11px] font-mono text-zinc-500">
+                  Terakhir: {supabaseConfig.lastBackupAt || 'Belum ada'}
+                </span>
+              </div>
+
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {backupLogs.map(log => (
+                  <div
+                    key={log.id}
+                    className="p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-white text-[11px]">{log.id}</span>
+                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono uppercase ${
+                          log.triggerType === 'manual' ? 'bg-sky-950 text-sky-400 border border-sky-900' : 'bg-emerald-950 text-emerald-400 border border-emerald-900'
+                        }`}>
+                          {log.triggerType}
+                        </span>
+                        <span className="text-zinc-500 text-[10px]">{log.timestamp}</span>
+                      </div>
+                      <div className="text-[11px] text-zinc-400 mt-0.5">
+                        Tabel: {log.summary.customers} Pelanggan · {log.summary.transactions} Transaksi · {log.summary.bills} Tagihan · {log.summary.vouchers} Voucher
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0 text-right">
+                      <span className="font-mono text-zinc-300 text-[11px]">{log.fileSizeKb} KB</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-400 border border-emerald-900">
+                        {log.status.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -830,13 +1007,26 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
               </div>
 
               <div>
-                <label className="block text-zinc-400 mb-1">Template Tagihan Bulanan</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-zinc-400">Template Tagihan Bulanan (Default Bot)</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowTemplateManager(true)}
+                    className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1 font-semibold"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Kelola Semua Template & Placeholder →</span>
+                  </button>
+                </div>
                 <textarea
-                  rows={2}
+                  rows={3}
                   value={waBotConfig.billingTemplate}
                   onChange={e => setWaBotConfig({ ...waBotConfig, billingTemplate: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px] focus:border-emerald-600 focus:outline-none"
                 />
+                <span className="text-[10px] text-zinc-500 block mt-0.5">
+                  Gunakan placeholder: <code>{'{NAMA}'}</code>, <code>{'{JUMLAH}'}</code>, <code>{'{NO_TAGIHAN}'}</code>, <code>{'{PERIODE}'}</code>, <code>{'{JATUH_TEMPO}'}</code>, <code>{'{LINK_DANA}'}</code>.
+                </span>
               </div>
 
               <div>
@@ -951,6 +1141,21 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
           </div>
         </div>
       )}
+
+      {/* ============================================================
+          SECTION 5: TUTORIAL & PANDUAN DEPLOYMENT HOSTING
+      ============================================================ */}
+      {activeSection === 'tutorial' && <HostingTutorialSection />}
+
+      {/* WhatsApp Template Management Modal */}
+      <WhatsAppTemplateModal
+        isOpen={showTemplateManager}
+        onClose={() => setShowTemplateManager(false)}
+        onTemplatesUpdated={() => {
+          setWaBotConfig(DataService.getWhatsAppBotConfig());
+          onRefreshData();
+        }}
+      />
     </div>
   );
 };

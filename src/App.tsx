@@ -25,7 +25,7 @@ import { DanaCheckoutModal } from './components/modals/DanaCheckoutModal';
 import { ProfileSettingsModal } from './components/modals/ProfileSettingsModal';
 
 import { DataService } from './services/dataService';
-import { getStoredSupabaseConfig } from './services/supabaseService';
+import { getStoredSupabaseConfig, checkAndTriggerScheduledBackup } from './services/supabaseService';
 import { Customer, Bill, Transaction, Voucher, RuijieDevice, InternetPackage, WhatsAppMessageLog, DanaPaymentSession } from './types';
 
 function MainApp() {
@@ -58,8 +58,9 @@ function MainApp() {
   const [selectedDanaSession, setSelectedDanaSession] = useState<DanaPaymentSession | null>(null);
   const [showProfileSettingsModal, setShowProfileSettingsModal] = useState(false);
 
-  // Real-time listener for any transaction, bill, or voucher update
+  // Real-time listener for any transaction, bill, or voucher update & recurring backup check
   useEffect(() => {
+    checkAndTriggerScheduledBackup();
     const unsubscribe = DataService.subscribe(() => {
       refreshAllData();
     });
@@ -143,7 +144,7 @@ function MainApp() {
       />
 
       {/* Main Workspace Canvas */}
-      <div className="flex-1 flex flex-col md:flex-row max-w-7xl w-full mx-auto">
+      <div className="flex-1 flex flex-col md:flex-row items-stretch max-w-7xl w-full mx-auto min-h-[calc(100vh-57px)]">
         {/* Navigation Sidebar */}
         <Sidebar
           activeTab={activeTab}
@@ -153,7 +154,7 @@ function MainApp() {
         />
 
         {/* Viewport Content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">
           {activeTab === 'dashboard' && (
             <DashboardView
               customers={customers}

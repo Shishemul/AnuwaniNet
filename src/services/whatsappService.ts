@@ -23,8 +23,60 @@ export class WhatsAppService {
     }).format(amount);
   }
 
-  // 1. Template Tagihan Bulanan
-  static generateBillingMessage(bill: Bill, customer: Customer): string {
+  // Dynamic Placeholder Replacer for WhatsApp Notification Templates
+  static renderTemplate(templateText: string, data: {
+    customer: Customer;
+    bill?: Bill;
+    customNote?: string;
+  }): string {
+    const { customer, bill, customNote } = data;
+    const amountVal = bill ? bill.amount : customer.packagePrice;
+    const amountFormatted = this.formatRupiah(amountVal);
+    const invoiceNum = bill?.billNumber || `INV-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-001`;
+    const periodStr = bill?.period || new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(new Date());
+    const dueDateStr = bill?.dueDate || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(customer.billingDay || 20).padStart(2, '0')}`;
+    const isolirDateStr = `${customer.billingDay + 2} ${periodStr}`;
+    const danaLink = `https://link.dana.id/pay?order=${invoiceNum}&amount=${amountVal}`;
+
+    let result = templateText;
+    const replacements: Record<string, string> = {
+      '{NAMA}': customer.name,
+      '{ID_PELANGGAN}': customer.customerCode,
+      '{NO_HP}': customer.phone,
+      '{ALAMAT}': customer.address || '-',
+      '{PAKET}': customer.packageName,
+      '{HARGA_PAKET}': this.formatRupiah(customer.packagePrice),
+      '{JUMLAH}': amountFormatted,
+      '{TOTAL_TAGIHAN}': amountFormatted,
+      '{NO_TAGIHAN}': invoiceNum,
+      '{NO_INVOICE}': invoiceNum,
+      '{PERIODE}': periodStr,
+      '{JATUH_TEMPO}': dueDateStr,
+      '{TANGGAL_ISOLIR}': isolirDateStr,
+      '{LINK_DANA}': danaLink,
+      '{STATUS_KONEKSI}': customer.status === 'active' ? 'AKTIF NORMAL' : customer.status === 'isolated' ? 'TERISOLIR' : 'PENDING',
+      '{CATATAN}': customNote || '',
+      '{TANGGAL_SEKARANG}': new Date().toLocaleDateString('id-ID', { dateStyle: 'long' })
+    };
+
+    Object.entries(replacements).forEach(([key, val]) => {
+      // replace all instances case-insensitively
+      const regex = new RegExp(key.replace(/[{}]/g, '\\$&'), 'gi');
+      result = result.replace(regex, val);
+    });
+
+    return result;
+  }
+
+  // 1. Template Tagihan Bulanan (Uses Active or Custom Template)
+  static generateBillingMessage(bill: Bill, customer: Customer, customTemplateText?: string): string {
+    const waConfig = DataService.getWhatsAppBotConfig();
+    const templateToUse = customTemplateText || waConfig.billingTemplate;
+
+    if (templateToUse && (templateToUse.includes('{') || customTemplateText)) {
+      return this.renderTemplate(templateToUse, { customer, bill });
+    }
+
     const danaLink = `https://link.dana.id/pay?order=${bill.billNumber}&amount=${bill.amount}`;
     return `*TAGIHAN INTERNET ANUWANINET*\n` +
       `--------------------------------------\n` +
@@ -129,6 +181,43 @@ export class WhatsAppService {
       timestamp: new Date().toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }),
       status: 'sent'
     });
+  }
+
+  // Auto Reminder Pelanggan with WhatsApp Bot
+  static runAutoReminderPelanggan(): {
+    sentCount: number;
+    remindedCustomers: string[];
+    message: string;
+  } {
+    const bills = DataService.getBills();
+    const customers = DataService.getCustomers();
+    const unpaidBills = bills.filter(b => b.status === 'unpaid' || b.status === 'overdue');
+
+    let sentCount = 0;
+    const remindedCustomers: string[] = [];
+
+    unpaidBills.forEach(bill => {
+      const cust = customers.find(c => c.id === bill.customerId);
+      if (cust) {
+        const msg = this.generateBillingMessage(bill, cust);
+        this.sendAutomatedNotification(cust.phone, cust.name, 'tagihan', msg);
+        
+        // Mark reminder sent
+        bill.whatsappReminderSent = true;
+        sentCount++;
+        remindedCustomers.push(`${cust.name} (${bill.billNumber})`);
+      }
+    });
+
+    DataService.saveBills(bills);
+
+    return {
+      sentCount,
+      remindedCustomers,
+      message: sentCount > 0
+        ? `Bot WhatsApp berhasil mengirimkan ${sentCount} pesan auto-reminder tagihan ke pelanggan!`
+        : 'Semua tagihan pelanggan saat ini telah lunas, tidak ada reminder yang perlu dikirim.'
+    };
   }
 
   // ==========================================

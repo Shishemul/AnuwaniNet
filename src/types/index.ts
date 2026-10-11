@@ -189,6 +189,25 @@ export interface SupabaseConfig {
   anonKey: string;
   isConnected: boolean;
   lastTested?: string;
+  backupIntervalHours?: number; // e.g., 6, 12, 24 hours
+  lastBackupAt?: string;
+  autoBackupEnabled?: boolean;
+}
+
+export interface DatabaseBackupRecord {
+  id: string;
+  timestamp: string;
+  tables: string[];
+  totalRecords: number;
+  fileSizeKb: number;
+  status: 'completed' | 'in_progress' | 'failed';
+  triggerType: 'manual' | 'scheduled';
+  summary: {
+    customers: number;
+    transactions: number;
+    bills: number;
+    vouchers: number;
+  };
 }
 
 export interface AppSettings {
@@ -199,6 +218,16 @@ export interface AppSettings {
   bcaAccount: string;
   briAccount: string;
   receiptFooterNote: string;
+}
+
+export interface WhatsAppCustomTemplate {
+  id: string;
+  name: string;
+  category: 'tagihan' | 'kuitansi' | 'pengingat' | 'promosi' | 'isolir';
+  content: string;
+  description?: string;
+  isDefault?: boolean;
+  createdAt?: string;
 }
 
 export interface WhatsAppBotConfig {
@@ -212,6 +241,7 @@ export interface WhatsAppBotConfig {
   billingTemplate: string;
   receiptTemplate: string;
   isolirTemplate: string;
+  customTemplates?: WhatsAppCustomTemplate[];
 }
 
 export interface SystemSettingsDatabase {

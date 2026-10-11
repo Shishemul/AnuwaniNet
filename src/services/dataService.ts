@@ -254,9 +254,77 @@ export class DataService {
     this.syncSystemSettingsToDatabase();
   }
 
-  // WhatsApp Bot Config
+  // WhatsApp Bot Config & Custom Billing Templates
   static getWhatsAppBotConfig(): import('../types').WhatsAppBotConfig {
-    return getStorage<import('../types').WhatsAppBotConfig>('anw_wa_bot_config_v1', {
+    const defaultTemplates: import('../types').WhatsAppCustomTemplate[] = [
+      {
+        id: 'tmpl-official',
+        name: 'Template Resmi AnuwaniNet (Lengkap)',
+        category: 'tagihan',
+        isDefault: true,
+        description: 'Format tagihan lengkap dengan rincian rekening BCA/BRI, link DANA, dan catatan isolir.',
+        content: `*TAGIHAN INTERNET ANUWANINET*
+--------------------------------------
+Kepada Yth: *{NAMA}*
+ID Pelanggan: *{ID_PELANGGAN}*
+No. Tagihan: *{NO_TAGIHAN}*
+Periode: *{PERIODE}*
+Paket: *{PAKET}*
+Total Tagihan: *{JUMLAH}*
+Jatuh Tempo: *{JATUH_TEMPO}*
+--------------------------------------
+Metode Pembayaran Resmi:
+🔹 *DANA E-Wallet & QRIS Instan*:
+👉 {LINK_DANA} (Auto-Verifikasi Langsung)
+🔹 *BCA*: 8291-039-112 a/n AnuwaniNet
+🔹 *BRI*: 0021-01-082910-50-1 a/n AnuwaniNet
+
+_Catatan: Layanan akan diisolir otomatis oleh sistem Ruijie jika belum dibayar hingga tanggal {TANGGAL_ISOLIR}._
+
+Terima kasih telah menggunakan layanan AnuwaniNet!`
+      },
+      {
+        id: 'tmpl-friendly',
+        name: 'Pengingat Ramah & Santai',
+        category: 'pengingat',
+        isDefault: false,
+        description: 'Pesan tagihan santai dan sopan untuk langganan warga perumahan/RT.',
+        content: `Halo Kak *{NAMA}* 😊,
+Semoga harinya menyenangkan! Sekadar mengingatkan tagihan internet AnuwaniNet untuk periode *{PERIODE}* sebesar *{JUMLAH}* telah terbit.
+
+Jatuh tempo pada tanggal: *{JATUH_TEMPO}*.
+Bisa langsung bayar praktis via DANA / QRIS di sini:
+👉 {LINK_DANA}
+
+Jika sudah melakukan pembayaran, silakan abaikan pesan ini ya. Terima kasih banyak Kak!`
+      },
+      {
+        id: 'tmpl-urgent',
+        name: 'Peringatan Jatuh Tempo & Auto-Isolir (Tegas)',
+        category: 'tagihan',
+        isDefault: false,
+        description: 'Peringatan keras H-1 atau saat overdue sebelum diputus auto-isolir Ruijie.',
+        content: `⚠️ *PERINGATAN JATUH TEMPO & AUTO-ISOLIR ANUWANINET*
+Yth. Bpk/Ibu *{NAMA}* ({ID_PELANGGAN}),
+
+Tagihan internet Anda no. *{NO_TAGIHAN}* sebesar *{JUMLAH}* telah melewati batas jatuh tempo *{JATUH_TEMPO}*.
+Layanan WiFi Anda dijadwalkan dialihkan ke profil isolir otomatis Ruijie pada tanggal *{TANGGAL_ISOLIR}*.
+
+Mohon segera selesaikan pelunasan instan:
+👉 {LINK_DANA}
+Konfirmasi otomatis setelah pembayaran sukses.`
+      },
+      {
+        id: 'tmpl-simple',
+        name: 'Format Singkat / SMS Style',
+        category: 'tagihan',
+        isDefault: false,
+        description: 'Format ringkas to-the-point untuk notifikasi cepat.',
+        content: `AnuwaniNet Info: Tagihan {PERIODE} a/n {NAMA} sebesar {JUMLAH}. Jatuh tempo {JATUH_TEMPO}. Bayar instan via DANA: {LINK_DANA}. Abaikan jika telah bayar.`
+      }
+    ];
+
+    const cfg = getStorage<import('../types').WhatsAppBotConfig>('anw_wa_bot_config_v1', {
       senderNumber: '0812-3456-7890',
       fonnteToken: 'FNTE_89a128bc991024_live',
       fonnteDevice: 'DEV-ANUWANINET-01',
@@ -264,10 +332,42 @@ export class DataService {
       autoSendOnBillCreated: true,
       autoSendOnDueAlert: true,
       botEnabled: true,
-      billingTemplate: 'Halo {NAMA}, tagihan AnuwaniNet periode {PERIODE} sebesar {JUMLAH} telah terbit. Jatuh tempo {JATUH_TEMPO}. Bayar DANA: {LINK_DANA}',
+      billingTemplate: defaultTemplates[0].content,
       receiptTemplate: 'Halo {NAMA}, pembayaran tagihan {NO_INVOICE} sebesar {JUMLAH} telah LUNAS terverifikasi. Terima kasih!',
-      isolirTemplate: 'Pemberitahuan Isolir: Layanan internet AnuwaniNet ID {ID_PELANGGAN} telah dialihkan sementara karena tunggakan tagihan.'
+      isolirTemplate: 'Pemberitahuan Isolir: Layanan internet AnuwaniNet ID {ID_PELANGGAN} telah dialihkan sementara karena tunggakan tagihan.',
+      customTemplates: defaultTemplates
     });
+
+    if (!cfg.customTemplates || cfg.customTemplates.length === 0) {
+      cfg.customTemplates = defaultTemplates;
+    }
+
+    return cfg;
+  }
+
+  static getCustomTemplates(): import('../types').WhatsAppCustomTemplate[] {
+    const config = this.getWhatsAppBotConfig();
+    return config.customTemplates || [];
+  }
+
+  static saveCustomTemplate(template: import('../types').WhatsAppCustomTemplate) {
+    const config = this.getWhatsAppBotConfig();
+    const list = config.customTemplates || [];
+    const index = list.findIndex(t => t.id === template.id);
+    if (index >= 0) {
+      list[index] = template;
+    } else {
+      list.push(template);
+    }
+    config.customTemplates = list;
+    this.saveWhatsAppBotConfig(config);
+    return template;
+  }
+
+  static deleteCustomTemplate(templateId: string) {
+    const config = this.getWhatsAppBotConfig();
+    config.customTemplates = (config.customTemplates || []).filter(t => t.id !== templateId);
+    this.saveWhatsAppBotConfig(config);
   }
 
   static saveWhatsAppBotConfig(config: import('../types').WhatsAppBotConfig) {

@@ -54,8 +54,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'ruijie',
-      label: 'Integrasi Ruijie & Isolir',
-      icon: Server,
+      label: role === 'superadmin' ? 'Integrasi Ruijie & Isolir' : 'Isolir & Auto Isolir',
+      icon: role === 'superadmin' ? Server : ShieldAlert,
       badge: isolatedCount > 0 ? `${isolatedCount} isolir` : undefined,
       badgeColor: 'text-red-400 bg-red-950/80 border-red-800',
       roles: ['superadmin', 'admin']
@@ -97,7 +97,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const visibleNav = navItems.filter(item => item.roles.includes(role));
 
   return (
-    <aside className="no-print w-full md:w-64 shrink-0 border-r border-zinc-800/80 bg-zinc-950/80 p-3 sm:p-4 flex flex-col justify-between">
+    <aside className="no-print w-full md:w-64 shrink-0 border-r border-zinc-800/80 bg-zinc-950/95 p-3 sm:p-4 flex flex-col justify-between md:sticky md:top-[57px] md:self-start md:h-[calc(100vh-57px)] md:overflow-y-auto z-30">
       <div className="space-y-6">
         {/* Navigation list */}
         <div className="space-y-1">

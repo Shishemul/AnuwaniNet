@@ -15,12 +15,195 @@ export function getStoredSupabaseConfig(): SupabaseConfig {
   return {
     url: (import.meta as any).env?.VITE_SUPABASE_URL || '',
     anonKey: (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '',
-    isConnected: false
+    isConnected: false,
+    autoBackupEnabled: true,
+    backupIntervalHours: 24,
+    lastBackupAt: undefined
   };
 }
 
 export function saveStoredSupabaseConfig(config: SupabaseConfig) {
   localStorage.setItem(STORAGE_KEY_SUPABASE, JSON.stringify(config));
+}
+
+const STORAGE_KEY_BACKUP_LOGS = 'anuwani_database_backup_logs';
+
+export function getDatabaseBackupLogs(): import('../types').DatabaseBackupRecord[] {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_BACKUP_LOGS);
+    if (saved) return JSON.parse(saved);
+  } catch {
+    // fallback
+  }
+  return [
+    {
+      id: 'bk-init-1',
+      timestamp: '2026-10-10 18:00',
+      tables: ['anuwani_customers', 'anuwani_transactions', 'anuwani_bills', 'anuwani_vouchers'],
+      totalRecords: 48,
+      fileSizeKb: 14.8,
+      status: 'completed',
+      triggerType: 'scheduled',
+      summary: {
+        customers: 5,
+        transactions: 7,
+        bills: 5,
+        vouchers: 6
+      }
+    }
+  ];
+}
+
+export function addDatabaseBackupLog(record: import('../types').DatabaseBackupRecord) {
+  const list = getDatabaseBackupLogs();
+  list.unshift(record);
+  try {
+    localStorage.setItem(STORAGE_KEY_BACKUP_LOGS, JSON.stringify(list.slice(0, 50)));
+  } catch (e) {
+    console.error('Failed to save backup log:', e);
+  }
+}
+
+/**
+ * Executes a full database backup export of core tables (customers, transactions, bills, vouchers).
+ * Generates structured JSON dump and initiates a download file if downloadFile=true.
+ */
+export async function executeDatabaseBackup(triggerType: 'manual' | 'scheduled' = 'manual', downloadFile: boolean = false): Promise<{
+  success: boolean;
+  message: string;
+  backupRecord?: import('../types').DatabaseBackupRecord;
+  dataDump?: any;
+}> {
+  try {
+    const customers = JSON.parse(localStorage.getItem('anw_customers_v1') || '[]');
+    const transactions = JSON.parse(localStorage.getItem('anw_transactions_v1') || '[]');
+    const bills = JSON.parse(localStorage.getItem('anw_bills_v1') || '[]');
+    const vouchers = JSON.parse(localStorage.getItem('anw_vouchers_v1') || '[]');
+    const systemSettings = JSON.parse(localStorage.getItem('anw_system_settings_db_v1') || '{}');
+
+    const totalRecords = customers.length + transactions.length + bills.length + vouchers.length;
+    const backupId = 'bk-' + Date.now();
+    const timestampStr = new Date().toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' });
+
+    const exportPayload = {
+      version: '1.0',
+      application: 'AnuwaniNet ISP Management System',
+      backupId,
+      exportedAt: new Date().toISOString(),
+      timestampLocal: timestampStr,
+      environment: 'Supabase / Cloud PostgreSQL & Local Storage Mirror',
+      triggerType,
+      tables: {
+        anuwani_customers: customers,
+        anuwani_transactions: transactions,
+        anuwani_bills: bills,
+        anuwani_vouchers: vouchers,
+        anuwani_system_settings: systemSettings
+      },
+      metadata: {
+        customerCount: customers.length,
+        transactionCount: transactions.length,
+        billCount: bills.length,
+        voucherCount: vouchers.length,
+        totalRecords
+      }
+    };
+
+    const jsonString = JSON.stringify(exportPayload, null, 2);
+    const sizeKb = Number((new Blob([jsonString]).size / 1024).toFixed(1));
+
+    const record: import('../types').DatabaseBackupRecord = {
+      id: backupId,
+      timestamp: timestampStr,
+      tables: ['anuwani_customers', 'anuwani_transactions', 'anuwani_bills', 'anuwani_vouchers'],
+      totalRecords,
+      fileSizeKb: sizeKb,
+      status: 'completed',
+      triggerType,
+      summary: {
+        customers: customers.length,
+        transactions: transactions.length,
+        bills: bills.length,
+        vouchers: vouchers.length
+      }
+    };
+
+    // Save log
+    addDatabaseBackupLog(record);
+
+    // Update config last backup time
+    const currentCfg = getStoredSupabaseConfig();
+    currentCfg.lastBackupAt = timestampStr;
+    saveStoredSupabaseConfig(currentCfg);
+
+    // If client requested file download, trigger browser file save
+    if (downloadFile && typeof document !== 'undefined') {
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `anuwaninet-db-backup-${new Date().toISOString().slice(0, 10)}-${Date.now().toString().slice(-4)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    // Try cloud sync if Supabase client is connected
+    const client = getSupabaseClient();
+    if (client) {
+      try {
+        await client.from('anuwani_system_settings').upsert({
+          id: 'backup_latest_meta',
+          app_settings: {
+            lastBackupId: backupId,
+            lastBackupAt: timestampStr,
+            recordCount: totalRecords
+          },
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+      } catch {
+        // Tolerant
+      }
+    }
+
+    return {
+      success: true,
+      message: `Cadangan database berhasil diekspor (${totalRecords} catatan, ${sizeKb} KB)!`,
+      backupRecord: record,
+      dataDump: exportPayload
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err?.message || 'Gagal membuat cadangan database.'
+    };
+  }
+}
+
+/**
+ * Initializes recurring database backup scheduler based on SupabaseConfig
+ */
+export function checkAndTriggerScheduledBackup(): boolean {
+  const config = getStoredSupabaseConfig();
+  if (!config.autoBackupEnabled) return false;
+
+  const intervalHours = config.backupIntervalHours || 24;
+  const lastBackup = config.lastBackupAt;
+
+  if (!lastBackup) {
+    executeDatabaseBackup('scheduled', false);
+    return true;
+  }
+
+  // Check elapsed time
+  const lastTime = new Date(lastBackup).getTime();
+  const now = Date.now();
+  if (isNaN(lastTime) || now - lastTime >= intervalHours * 3600 * 1000) {
+    executeDatabaseBackup('scheduled', false);
+    return true;
+  }
+  return false;
 }
 
 let cachedClient: SupabaseClient | null = null;

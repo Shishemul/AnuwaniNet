@@ -12,11 +12,15 @@ import {
   ArrowUpDown,
   Calendar,
   DollarSign,
-  CreditCard
+  CreditCard,
+  BellRing,
+  FileText
 } from 'lucide-react';
 import { WhatsAppService } from '../services/whatsappService';
 import { DataService } from '../services/dataService';
 import { DanaService } from '../services/danaService';
+import { WhatsAppTemplateModal } from '../components/modals/WhatsAppTemplateModal';
+import { BulkGenerateBillsModal } from '../components/modals/BulkGenerateBillsModal';
 
 interface TagihanViewProps {
   bills: Bill[];
@@ -39,6 +43,12 @@ export const TagihanView: React.FC<TagihanViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'unpaid' | 'overdue' | 'paid'>('all');
   const [periodFilter, setPeriodFilter] = useState<string>('all');
   const [notificationStatus, setNotificationStatus] = useState<string | null>(null);
+
+  // Modal States
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [selectedBillForTemplate, setSelectedBillForTemplate] = useState<Bill | null>(null);
+  const [selectedCustomerForTemplate, setSelectedCustomerForTemplate] = useState<Customer | null>(null);
 
   // Periods list
   const uniquePeriods = Array.from(new Set(bills.map(b => b.period)));
@@ -139,13 +149,45 @@ export const TagihanView: React.FC<TagihanViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={handleGenerateMonthlyBills}
-          className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors shadow-sm shadow-red-950 self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ Generate Tagihan Periode Ini</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {/* Kelola Template Pesan WhatsApp */}
+          <button
+            onClick={() => {
+              setSelectedBillForTemplate(bills[0] || null);
+              const cust = customers.find(c => c.id === bills[0]?.customerId) || customers[0] || null;
+              setSelectedCustomerForTemplate(cust);
+              setShowTemplateModal(true);
+            }}
+            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:bg-zinc-800 transition-colors shadow-sm"
+            title="Kelola, simpan, dan pilih template pesan WhatsApp dengan placeholder dinamis"
+          >
+            <FileText className="w-4 h-4 text-emerald-400" />
+            <span>Template Pesan WA</span>
+          </button>
+
+          <button
+            onClick={() => {
+              const res = WhatsAppService.runAutoReminderPelanggan();
+              setNotificationStatus(res.message);
+              onRefreshData();
+              setTimeout(() => setNotificationStatus(null), 6000);
+            }}
+            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-950 border border-emerald-800 text-emerald-300 hover:bg-emerald-900 transition-colors shadow-sm"
+            title="Kirim pesan peringatan jatuh tempo otomatis ke nomor WhatsApp pelanggan tertunggak"
+          >
+            <BellRing className="w-4 h-4 text-emerald-400" />
+            <span>Auto-Reminder Bot WA</span>
+          </button>
+
+          <button
+            onClick={() => setShowBulkModal(true)}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors shadow-sm shadow-red-950"
+            title="Generate tagihan bulanan massal dengan opsi pratinjau dan konfirmasi"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Generate Tagihan Massal</span>
+          </button>
+        </div>
       </div>
 
       {notificationStatus && (
@@ -337,15 +379,29 @@ export const TagihanView: React.FC<TagihanViewProps> = ({
                       {/* Action buttons */}
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Send WhatsApp Reminder */}
+                          {/* Choose Template & Send WhatsApp */}
                           {!isPaid ? (
-                            <button
-                              onClick={() => handleSendWaReminder(bill)}
-                              title="Kirim Notifikasi Tagihan via WhatsApp"
-                              className="p-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-emerald-400 hover:bg-emerald-950/50 hover:border-emerald-800 transition-colors"
-                            >
-                              <Send className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleSendWaReminder(bill)}
+                                title="Kirim Cepat via WhatsApp Default"
+                                className="p-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-emerald-400 hover:bg-emerald-950/50 hover:border-emerald-800 transition-colors"
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedBillForTemplate(bill);
+                                  const cust = customers.find(c => c.id === bill.customerId) || null;
+                                  setSelectedCustomerForTemplate(cust);
+                                  setShowTemplateModal(true);
+                                }}
+                                title="Pilih / Edit Template Pesan Kustom untuk Pelanggan Ini"
+                                className="p-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800 transition-colors"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           ) : (
                             <button
                               onClick={() => {
@@ -408,6 +464,38 @@ export const TagihanView: React.FC<TagihanViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* WhatsApp Custom Template Modal */}
+      <WhatsAppTemplateModal
+        isOpen={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        bill={selectedBillForTemplate}
+        customer={selectedCustomerForTemplate}
+        onSelectAndSend={(renderedMsg) => {
+          if (selectedCustomerForTemplate) {
+            WhatsAppService.openWhatsAppUrl(selectedCustomerForTemplate.phone, renderedMsg);
+            if (selectedBillForTemplate) {
+              selectedBillForTemplate.whatsappReminderSent = true;
+              DataService.updateBill(selectedBillForTemplate);
+              onRefreshData();
+            }
+          }
+        }}
+        onTemplatesUpdated={onRefreshData}
+      />
+
+      {/* Bulk Generate Bills with Preview & Confirmation Modal */}
+      <BulkGenerateBillsModal
+        isOpen={showBulkModal}
+        onClose={() => setShowBulkModal(false)}
+        customers={customers}
+        existingBills={bills}
+        onBillsGenerated={(_newBills, message) => {
+          setNotificationStatus(message);
+          onRefreshData();
+          setTimeout(() => setNotificationStatus(null), 6000);
+        }}
+      />
     </div>
   );
 };

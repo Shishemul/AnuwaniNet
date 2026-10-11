@@ -14,11 +14,13 @@ import {
   MapPin,
   CheckCircle,
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  FileText
 } from 'lucide-react';
 import { RuijieService } from '../services/ruijieService';
 import { WhatsAppService } from '../services/whatsappService';
 import { DataService } from '../services/dataService';
+import { WhatsAppTemplateModal } from '../components/modals/WhatsAppTemplateModal';
 
 interface PelangganViewProps {
   customers: Customer[];
@@ -38,6 +40,8 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'isolated' | 'pending'>('all');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [selectedCustomerForTemplate, setSelectedCustomerForTemplate] = useState<Customer | null>(null);
 
   const filteredCustomers = customers.filter(c => {
     const matchSearch =
@@ -113,13 +117,27 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={onOpenAddCustomer}
-          className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors shadow-sm shadow-red-950 self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ Tambah Pelanggan Baru</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => {
+              setSelectedCustomerForTemplate(customers[0] || null);
+              setShowTemplateModal(true);
+            }}
+            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:bg-zinc-800 transition-colors shadow-sm"
+            title="Kelola, simpan, dan pilih template pesan WhatsApp dengan placeholder dinamis"
+          >
+            <FileText className="w-4 h-4 text-emerald-400" />
+            <span>Template Pesan WA</span>
+          </button>
+
+          <button
+            onClick={onOpenAddCustomer}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors shadow-sm shadow-red-950"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Tambah Pelanggan Baru</span>
+          </button>
+        </div>
       </div>
 
       {actionMessage && (
@@ -276,10 +294,22 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
                           {/* Chat WA */}
                           <button
                             onClick={() => handleSendWaDirect(c)}
-                            title="Chat WhatsApp Pelanggan"
+                            title="Chat Cepat WhatsApp Pelanggan"
                             className="p-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-emerald-400 hover:bg-emerald-950/50 hover:border-emerald-800 transition-colors"
                           >
                             <Send className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Pilih Template WA Kustom */}
+                          <button
+                            onClick={() => {
+                              setSelectedCustomerForTemplate(c);
+                              setShowTemplateModal(true);
+                            }}
+                            title="Pilih & Sesuaikan Template Pesan Kustom untuk Pelanggan Ini"
+                            className="p-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800 transition-colors"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
                           </button>
 
                           {/* Isolir / Restore Buttons */}
@@ -336,6 +366,19 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* WhatsApp Custom Template Modal */}
+      <WhatsAppTemplateModal
+        isOpen={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        customer={selectedCustomerForTemplate}
+        onSelectAndSend={(renderedMsg) => {
+          if (selectedCustomerForTemplate) {
+            WhatsAppService.openWhatsAppUrl(selectedCustomerForTemplate.phone, renderedMsg);
+          }
+        }}
+        onTemplatesUpdated={onRefreshData}
+      />
     </div>
   );
 };
