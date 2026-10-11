@@ -1,0 +1,177 @@
+import React from 'react';
+import { useAuth } from '../context/AuthContext';
+import { Shield, UserCheck, Database, LogIn, LogOut, ChevronDown } from 'lucide-react';
+import { UserRole } from '../types';
+
+interface HeaderProps {
+  onOpenAuth: () => void;
+  onOpenSupabase: () => void;
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+  isSupabaseConnected: boolean;
+}
+
+export const Header: React.FC<HeaderProps> = ({
+  onOpenAuth,
+  onOpenSupabase,
+  activeTab,
+  setActiveTab,
+  isSupabaseConnected
+}) => {
+  const { currentUser, logout, switchRole } = useAuth();
+  const [showRoleMenu, setShowRoleMenu] = React.useState(false);
+
+  const getRoleBadge = (role: UserRole) => {
+    switch (role) {
+      case 'superadmin':
+        return <span className="text-xs font-semibold text-red-500 uppercase tracking-wider">Superadmin</span>;
+      case 'admin':
+        return <span className="text-xs font-semibold text-rose-400 uppercase tracking-wider">Admin</span>;
+      case 'pelanggan':
+        return <span className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Pelanggan</span>;
+    }
+  };
+
+  return (
+    <header className="no-print sticky top-0 z-40 w-full border-b border-zinc-800 bg-zinc-950/95 backdrop-blur-md px-4 sm:px-6 py-3">
+      <div className="flex items-center justify-between gap-6 max-w-7xl mx-auto">
+        {/* Zone 1: Brand title wordmark */}
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className="flex items-center gap-2.5 text-left focus:outline-none"
+          >
+            <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center font-black text-white text-base shadow-sm shadow-red-900/50">
+              A
+            </div>
+            <div className="flex flex-col">
+              <span className="text-base font-extrabold tracking-tight text-white whitespace-nowrap">
+                Anuwani<span className="text-red-500">Net</span>
+              </span>
+              <span className="text-[10px] text-zinc-400 font-medium tracking-wider -mt-1 uppercase">
+                ISP & Billing Manager
+              </span>
+            </div>
+          </button>
+        </div>
+
+        {/* Zone 2: Navigation Links */}
+        <nav className="hidden lg:flex items-center gap-6 text-sm font-medium text-zinc-400">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`whitespace-nowrap transition-colors hover:text-white ${
+              activeTab === 'dashboard' ? 'text-white font-semibold' : ''
+            }`}
+          >
+            Ringkasan
+          </button>
+          <button
+            onClick={() => setActiveTab('pelanggan')}
+            className={`whitespace-nowrap transition-colors hover:text-white ${
+              activeTab === 'pelanggan' ? 'text-white font-semibold' : ''
+            }`}
+          >
+            Pelanggan
+          </button>
+          <button
+            onClick={() => setActiveTab('tagihan')}
+            className={`whitespace-nowrap transition-colors hover:text-white ${
+              activeTab === 'tagihan' ? 'text-white font-semibold' : ''
+            }`}
+          >
+            Tagihan
+          </button>
+          <button
+            onClick={() => setActiveTab('ruijie')}
+            className={`whitespace-nowrap transition-colors hover:text-white ${
+              activeTab === 'ruijie' ? 'text-white font-semibold' : ''
+            }`}
+          >
+            Ruijie & Isolir
+          </button>
+          <button
+            onClick={() => setActiveTab('voucher_wa')}
+            className={`whitespace-nowrap transition-colors hover:text-white ${
+              activeTab === 'voucher_wa' ? 'text-white font-semibold' : ''
+            }`}
+          >
+            Voucher & WA Bot
+          </button>
+          <button
+            onClick={() => setActiveTab('laporan')}
+            className={`whitespace-nowrap transition-colors hover:text-white ${
+              activeTab === 'laporan' ? 'text-white font-semibold' : ''
+            }`}
+          >
+            Laporan
+          </button>
+          {currentUser?.role === 'superadmin' && (
+            <button
+              onClick={() => setActiveTab('users')}
+              className={`whitespace-nowrap transition-colors hover:text-white ${
+                activeTab === 'users' ? 'text-white font-semibold' : ''
+              }`}
+            >
+              Manajemen User
+            </button>
+          )}
+        </nav>
+
+        {/* Zone 3: Primary Action / User Profile & Supabase */}
+        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+          {/* Supabase status button */}
+          <button
+            onClick={onOpenSupabase}
+            title="Konfigurasi Supabase Database"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:text-white transition-colors"
+          >
+            <Database className="w-3.5 h-3.5 text-red-500" />
+            <span className="hidden sm:inline">Supabase</span>
+            <span className={`w-1.5 h-1.5 rounded-full ${isSupabaseConnected ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
+          </button>
+
+          {/* User Status / Current Role Indicator (Locked without login) */}
+          <div className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md border border-zinc-800 bg-zinc-900 text-zinc-200">
+            <Shield className="w-3.5 h-3.5 text-red-500" />
+            <span className="hidden sm:inline text-zinc-400">Peran:</span>
+            {currentUser ? (
+              getRoleBadge(currentUser.role)
+            ) : (
+              <span className="text-zinc-500 italic">Belum Login</span>
+            )}
+          </div>
+
+          {/* User profile / Login */}
+          {currentUser ? (
+            <div className="flex items-center gap-2">
+              <div className="hidden md:flex flex-col text-right">
+                <span className="text-xs font-semibold text-white leading-tight">
+                  {currentUser.name}
+                </span>
+                <span className="text-[10px] text-zinc-400">
+                  {currentUser.phone}
+                </span>
+              </div>
+              <button
+                onClick={logout}
+                title="Keluar dari Akun"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-red-400 hover:border-red-900/50 transition-colors text-xs"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Keluar</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onOpenAuth}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-md bg-red-600 text-white hover:bg-red-500 transition-colors whitespace-nowrap shadow-sm shadow-red-950"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Masuk untuk Akses Peran</span>
+            </button>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+};

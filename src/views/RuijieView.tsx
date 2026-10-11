@@ -1,0 +1,397 @@
+import React, { useState } from 'react';
+import { Customer, RuijieConfig, RuijieDevice } from '../types';
+import {
+  Server,
+  ShieldAlert,
+  ShieldCheck,
+  RefreshCw,
+  Cpu,
+  HardDrive,
+  Wifi,
+  Settings,
+  Activity,
+  CheckCircle,
+  AlertCircle,
+  Key,
+  Globe,
+  Sliders,
+  Send
+} from 'lucide-react';
+import { RuijieService, RuijieExecutionLog } from '../services/ruijieService';
+import { DataService } from '../services/dataService';
+import { WhatsAppService } from '../services/whatsappService';
+
+interface RuijieViewProps {
+  devices: RuijieDevice[];
+  customers: Customer[];
+  onRefreshData: () => void;
+}
+
+export const RuijieView: React.FC<RuijieViewProps> = ({
+  devices,
+  customers,
+  onRefreshData
+}) => {
+  const [config, setConfig] = useState<RuijieConfig>(() => DataService.getRuijieConfig());
+  const [logs, setLogs] = useState<RuijieExecutionLog[]>(() => RuijieService.getLogs());
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string; latency?: number } | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+
+  const isolatedCustomers = customers.filter(c => c.status === 'isolated');
+  const activeCustomers = customers.filter(c => c.status === 'active');
+
+  const handleSaveConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    DataService.saveRuijieConfig(config);
+    setActionNotice('Konfigurasi Ruijie Reyee berhasil disimpan!');
+    setTimeout(() => setActionNotice(null), 4000);
+  };
+
+  const handleTestConnection = async () => {
+    setIsTesting(true);
+    setTestResult(null);
+    const res = await RuijieService.testRuijieConnection(config);
+    setIsTesting(false);
+    setTestResult({
+      success: res.success,
+      message: res.message,
+      latency: res.latencyMs
+    });
+  };
+
+  const handleRunAutoIsolirNow = () => {
+    const res = RuijieService.runAutoIsolir();
+    setLogs(RuijieService.getLogs());
+    onRefreshData();
+    setActionNotice(res.message);
+    setTimeout(() => setActionNotice(null), 5000);
+  };
+
+  const handleSyncVouchers = () => {
+    setIsSyncing(true);
+    setTimeout(() => {
+      const res = RuijieService.syncVouchersWithRuijie();
+      setIsSyncing(false);
+      setLogs(RuijieService.getLogs());
+      setActionNotice(res.message);
+      setTimeout(() => setActionNotice(null), 4000);
+    }, 600);
+  };
+
+  const handleQuickToggleIsolir = (c: Customer) => {
+    if (c.status === 'isolated') {
+      RuijieService.restoreCustomer(c, 'Pulihkan manual dari panel Ruijie');
+      setActionNotice(`Isolir ${c.name} telah dipulihkan.`);
+    } else {
+      RuijieService.isolateCustomer(c, 'Isolir manual dari panel Ruijie');
+      setActionNotice(`${c.name} telah diisolir di Ruijie Gateway.`);
+    }
+    setLogs(RuijieService.getLogs());
+    onRefreshData();
+    setTimeout(() => setActionNotice(null), 4000);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-zinc-800">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+            <Server className="w-6 h-6 text-red-500" />
+            Integrasi Ruijie Reyee & Auto Isolir
+          </h1>
+          <p className="text-xs sm:text-sm text-zinc-400">
+            Otomasi isolir pelanggan tertunggak, sinkronisasi profil hotspot voucher, dan pemantauan gateway.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={handleSyncVouchers}
+            disabled={isSyncing}
+            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:bg-zinc-800 transition-colors shadow-sm"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-red-500 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>Sinkron Voucher ke Ruijie</span>
+          </button>
+
+          <button
+            onClick={handleRunAutoIsolirNow}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors shadow-sm shadow-red-950"
+          >
+            <ShieldAlert className="w-4 h-4" />
+            <span>Jalankan Auto Isolir Sekarang</span>
+          </button>
+        </div>
+      </div>
+
+      {actionNotice && (
+        <div className="p-3.5 rounded-lg bg-zinc-900 border border-red-900/60 text-xs text-white flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{actionNotice}</span>
+        </div>
+      )}
+
+      {/* Hardware Monitoring Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {devices.map(dev => (
+          <div key={dev.id} className="p-4 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-red-950/60 text-red-400 border border-red-900/40">
+                  <Server className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">{dev.name}</h3>
+                  <p className="text-[11px] text-zinc-400 font-mono">{dev.model} · SN: {dev.serialNumber}</p>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-emerald-950 text-emerald-400 border border-emerald-900/60">
+                Online
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-zinc-800/80 text-xs">
+              <div className="p-2 rounded-lg bg-zinc-950 border border-zinc-800/60">
+                <div className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                  <Cpu className="w-3 h-3 text-zinc-400" /> CPU
+                </div>
+                <div className="font-mono font-bold text-white mt-1 tabular-nums">{dev.cpuUsage}%</div>
+              </div>
+
+              <div className="p-2 rounded-lg bg-zinc-950 border border-zinc-800/60">
+                <div className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                  <HardDrive className="w-3 h-3 text-zinc-400" /> Memori
+                </div>
+                <div className="font-mono font-bold text-white mt-1 tabular-nums">{dev.memUsage}%</div>
+              </div>
+
+              <div className="p-2 rounded-lg bg-zinc-950 border border-zinc-800/60">
+                <div className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                  <Wifi className="w-3 h-3 text-emerald-400" /> Klien Aktif
+                </div>
+                <div className="font-mono font-bold text-emerald-400 mt-1 tabular-nums">{dev.connectedUsers} Klien</div>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-zinc-400 flex items-center justify-between pt-1">
+              <span>Pool Isolir: <span className="font-mono text-red-400">{dev.isolirPoolName}</span></span>
+              <span className="text-zinc-500">Sync: {dev.lastSync}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 2-Column: Auto-Isolir Rules & Quick Isolir Table */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column: Rules & Ruijie API Settings (5 cols) */}
+        <div className="lg:col-span-5 space-y-4">
+          {/* Rules Form */}
+          <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-4">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-red-500" />
+              Aturan Auto-Isolir Ruijie
+            </h3>
+
+            <form onSubmit={handleSaveConfig} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-zinc-400 mb-1">Tanggal Jatuh Tempo Bulanan</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="28"
+                    value={config.autoIsolirDay}
+                    onChange={e => setConfig({ ...config, autoIsolirDay: parseInt(e.target.value) || 20 })}
+                    className="w-24 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono focus:border-red-600 focus:outline-none"
+                  />
+                  <span className="text-zinc-400">setiap bulan (default tanggal 20)</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1">Masa Tenggang / Toleransi (Hari)</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="10"
+                    value={config.gracePeriodDays}
+                    onChange={e => setConfig({ ...config, gracePeriodDays: parseInt(e.target.value) || 2 })}
+                    className="w-24 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono focus:border-red-600 focus:outline-none"
+                  />
+                  <span className="text-zinc-400">hari setelah jatuh tempo (Isolir tgl {config.autoIsolirDay + config.gracePeriodDays})</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1">Profil PPPoE Isolir Ruijie Reyee</label>
+                <input
+                  type="text"
+                  value={config.isolirProfileName}
+                  onChange={e => setConfig({ ...config, isolirProfileName: e.target.value })}
+                  className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono focus:border-red-600 focus:outline-none"
+                />
+                <span className="text-[10px] text-zinc-500 mt-0.5 block">
+                  Profil di router yang membatasi bandwith dan mengarahkan DNS ke halaman tagihan
+                </span>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="w-full py-2 rounded-lg bg-zinc-800 text-white font-semibold hover:bg-zinc-700 transition-colors"
+                >
+                  Simpan Aturan Auto-Isolir
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Cloud API Credentials */}
+          <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-3 text-xs">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Key className="w-4 h-4 text-red-500" />
+              Kredensial Ruijie Reyee Cloud API (App ID & Secret Key)
+            </h3>
+
+            <div>
+              <label className="block text-zinc-400 mb-1">Ruijie App ID</label>
+              <input
+                type="text"
+                placeholder="rj_app_anuwani_882910398"
+                value={config.appId || config.apiKey || ''}
+                onChange={e => setConfig({ ...config, appId: e.target.value, apiKey: e.target.value })}
+                className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-zinc-400 mb-1">Ruijie Secret Key</label>
+              <input
+                type="password"
+                placeholder="rj_sec_778120392819039129x88a"
+                value={config.secretKey || config.apiSecret || ''}
+                onChange={e => setConfig({ ...config, secretKey: e.target.value, apiSecret: e.target.value })}
+                className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-zinc-400 mb-1">Cloud Open API URL</label>
+              <input
+                type="text"
+                value={config.cloudUrl}
+                onChange={e => setConfig({ ...config, cloudUrl: e.target.value })}
+                className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-zinc-400 mb-1">Site ID</label>
+              <input
+                type="text"
+                value={config.siteId}
+                onChange={e => setConfig({ ...config, siteId: e.target.value })}
+                className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px]"
+              />
+            </div>
+
+            <div className="pt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={isTesting}
+                className="flex-1 py-1.5 rounded-lg bg-zinc-800 text-white hover:bg-zinc-700 transition-colors font-medium text-xs flex items-center justify-center gap-1.5"
+              >
+                {isTesting ? 'Mengetes...' : 'Test Koneksi Ruijie Cloud'}
+              </button>
+            </div>
+
+            {testResult && (
+              <div className={`p-2 rounded-lg text-[11px] font-mono ${
+                testResult.success ? 'bg-emerald-950/60 border border-emerald-800 text-emerald-300' : 'bg-red-950/60 border border-red-800 text-red-300'
+              }`}>
+                {testResult.message} {testResult.latency ? `(${testResult.latency} ms)` : ''}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Fast Isolir Control & Live Execution Logs (7 cols) */}
+        <div className="lg:col-span-7 space-y-4">
+          {/* Quick isolir status */}
+          <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-red-500" />
+                Daftar Pelanggan Terisolir ({isolatedCustomers.length})
+              </h3>
+              <span className="text-[11px] text-zinc-400">
+                Layanan dibatasi ke portal bayar
+              </span>
+            </div>
+
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              {isolatedCustomers.length === 0 ? (
+                <div className="p-4 text-center rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-500">
+                  Tidak ada pelanggan yang sedang terisolir saat ini.
+                </div>
+              ) : (
+                isolatedCustomers.map(c => (
+                  <div
+                    key={c.id}
+                    className="p-2.5 rounded-lg bg-zinc-950 border border-red-900/40 flex items-center justify-between text-xs"
+                  >
+                    <div>
+                      <div className="font-semibold text-white">{c.name} ({c.customerCode})</div>
+                      <div className="text-[11px] text-zinc-400 font-mono">
+                        PPPoE: {c.pppoeUsername} · {c.phone}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleQuickToggleIsolir(c)}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-500 transition-colors shadow-sm"
+                    >
+                      Buka Isolir
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Ruijie Real-time Execution Logs */}
+          <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Activity className="w-4 h-4 text-red-500" />
+                Audit Log Eksekusi Ruijie Reyee
+              </h3>
+              <span className="text-[11px] font-mono text-zinc-500">Live API trace</span>
+            </div>
+
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1 font-mono text-[11px]">
+              {logs.map(log => (
+                <div key={log.id} className="p-2 rounded-lg bg-zinc-950 border border-zinc-800/80 space-y-1">
+                  <div className="flex items-center justify-between text-zinc-400">
+                    <span className="text-red-400 font-bold uppercase">{log.action.replace('_', ' ')}</span>
+                    <span className="text-[10px] text-zinc-500">{log.timestamp}</span>
+                  </div>
+                  <p className="text-zinc-300 font-sans text-xs">{log.details}</p>
+                  {log.customerName && (
+                    <div className="text-[10px] text-zinc-500">
+                      Target: {log.customerName} ({log.customerCode})
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
