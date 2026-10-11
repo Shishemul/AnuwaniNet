@@ -12,6 +12,7 @@ import { UserManagementView } from './views/UserManagementView';
 import { CustomerPortalView } from './views/CustomerPortalView';
 import { DanaGatewayView } from './views/DanaGatewayView';
 import { PengaturanSuperadminView } from './views/PengaturanSuperadminView';
+import { LoginView } from './views/LoginView';
 
 // Modals
 import { AuthModal } from './components/modals/AuthModal';
@@ -21,6 +22,7 @@ import { PrintModal } from './components/modals/PrintModal';
 import { SupabaseModal } from './components/modals/SupabaseModal';
 import { TransactionModal } from './components/modals/TransactionModal';
 import { DanaCheckoutModal } from './components/modals/DanaCheckoutModal';
+import { ProfileSettingsModal } from './components/modals/ProfileSettingsModal';
 
 import { DataService } from './services/dataService';
 import { getStoredSupabaseConfig } from './services/supabaseService';
@@ -54,6 +56,7 @@ function MainApp() {
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showDanaModal, setShowDanaModal] = useState(false);
   const [selectedDanaSession, setSelectedDanaSession] = useState<DanaPaymentSession | null>(null);
+  const [showProfileSettingsModal, setShowProfileSettingsModal] = useState(false);
 
   // Real-time listener for any transaction, bill, or voucher update
   useEffect(() => {
@@ -84,6 +87,20 @@ function MainApp() {
     setWaLogs(DataService.getWaLogs());
     setIsSupabaseConnected(getStoredSupabaseConfig().isConnected);
   };
+
+  // JIKA BELUM LOGIN: TAMPILAN AWAL ADALAH TAMPILAN LOGIN
+  if (!currentUser) {
+    return (
+      <>
+        <LoginView />
+        <SupabaseModal
+          isOpen={showSupabaseModal}
+          onClose={() => setShowSupabaseModal(false)}
+          onConfigUpdated={refreshAllData}
+        />
+      </>
+    );
+  }
 
   const handleOpenAddCustomer = () => {
     setCustomerToEdit(null);
@@ -119,6 +136,7 @@ function MainApp() {
       <Header
         onOpenAuth={() => setShowAuthModal(true)}
         onOpenSupabase={() => setShowSupabaseModal(true)}
+        onOpenProfileSettings={() => setShowProfileSettingsModal(true)}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         isSupabaseConnected={isSupabaseConnected}
@@ -283,6 +301,11 @@ function MainApp() {
         onClose={() => setShowTransactionModal(false)}
         customers={customers}
         onTransactionAdded={refreshAllData}
+      />
+
+      <ProfileSettingsModal
+        isOpen={showProfileSettingsModal}
+        onClose={() => setShowProfileSettingsModal(false)}
       />
     </div>
   );

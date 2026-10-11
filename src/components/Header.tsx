@@ -1,11 +1,12 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Shield, UserCheck, Database, LogIn, LogOut, ChevronDown } from 'lucide-react';
-import { UserRole } from '../types';
+import { Shield, UserCheck, Database, LogIn, LogOut, ChevronDown, Moon, Sun, User as UserIcon, Settings } from 'lucide-react';
+import { UserRole, ThemePreference } from '../types';
 
 interface HeaderProps {
   onOpenAuth: () => void;
   onOpenSupabase: () => void;
+  onOpenProfileSettings?: () => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
   isSupabaseConnected: boolean;
@@ -14,12 +15,20 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   onOpenAuth,
   onOpenSupabase,
+  onOpenProfileSettings,
   activeTab,
   setActiveTab,
   isSupabaseConnected
 }) => {
-  const { currentUser, logout, switchRole } = useAuth();
+  const { currentUser, logout, switchRole, updateThemePreference } = useAuth();
   const [showRoleMenu, setShowRoleMenu] = React.useState(false);
+
+  const currentTheme: ThemePreference = currentUser?.themePreference || 'midnight';
+
+  const handleToggleTheme = () => {
+    const nextTheme: ThemePreference = currentTheme === 'midnight' ? 'clean' : 'midnight';
+    updateThemePreference(nextTheme);
+  };
 
   const getRoleBadge = (role: UserRole) => {
     switch (role) {
@@ -118,7 +127,26 @@ export const Header: React.FC<HeaderProps> = ({
         </nav>
 
         {/* Zone 3: Primary Action / User Profile & Supabase */}
-        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          {/* Quick Theme Preference Toggle Button */}
+          <button
+            onClick={handleToggleTheme}
+            title={`Ganti Tema: ${currentTheme === 'midnight' ? 'Aktifkan Clean (High-Contrast)' : 'Aktifkan Midnight (Dark Mode)'}`}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:text-white transition-colors"
+          >
+            {currentTheme === 'midnight' ? (
+              <>
+                <Moon className="w-3.5 h-3.5 text-blue-400" />
+                <span className="hidden xl:inline text-[11px]">Midnight</span>
+              </>
+            ) : (
+              <>
+                <Sun className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden xl:inline text-[11px]">Clean</span>
+              </>
+            )}
+          </button>
+
           {/* Supabase status button */}
           <button
             onClick={onOpenSupabase}
@@ -131,7 +159,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {/* User Status / Current Role Indicator (Locked without login) */}
-          <div className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md border border-zinc-800 bg-zinc-900 text-zinc-200">
+          <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium rounded-md border border-zinc-800 bg-zinc-900 text-zinc-200">
             <Shield className="w-3.5 h-3.5 text-red-500" />
             <span className="hidden sm:inline text-zinc-400">Peran:</span>
             {currentUser ? (
@@ -144,14 +172,25 @@ export const Header: React.FC<HeaderProps> = ({
           {/* User profile / Login */}
           {currentUser ? (
             <div className="flex items-center gap-2">
-              <div className="hidden md:flex flex-col text-right">
-                <span className="text-xs font-semibold text-white leading-tight">
-                  {currentUser.name}
-                </span>
-                <span className="text-[10px] text-zinc-400">
-                  {currentUser.phone}
-                </span>
-              </div>
+              <button
+                type="button"
+                onClick={onOpenProfileSettings}
+                title="Buka Pengaturan Profil & Tema"
+                className="flex items-center gap-2 p-1 sm:px-2 sm:py-1 rounded-md border border-zinc-800 bg-zinc-900 hover:border-zinc-700 hover:bg-zinc-800/80 transition-colors text-left group"
+              >
+                <div className="w-6 h-6 rounded-full bg-red-950 border border-red-800 text-red-400 flex items-center justify-center text-[11px] font-bold">
+                  {currentUser.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="hidden md:flex flex-col text-right">
+                  <span className="text-xs font-semibold text-white group-hover:text-red-400 transition-colors leading-tight">
+                    {currentUser.name}
+                  </span>
+                  <span className="text-[10px] text-zinc-400">
+                    Pengaturan Profil
+                  </span>
+                </div>
+              </button>
+
               <button
                 onClick={logout}
                 title="Keluar dari Akun"
@@ -167,7 +206,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-md bg-red-600 text-white hover:bg-red-500 transition-colors whitespace-nowrap shadow-sm shadow-red-950"
             >
               <LogIn className="w-3.5 h-3.5" />
-              <span>Masuk untuk Akses Peran</span>
+              <span>Masuk</span>
             </button>
           )}
         </div>

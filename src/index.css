@@ -48,3 +48,104 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #3f3f46;
 }
+
+/* ============================================================
+   HIGH-CONTRAST CLEAN THEME SPECIFICATION
+   ============================================================ */
+[data-theme="clean"],
+.theme-clean {
+  --clean-bg: #f8fafc;
+  --clean-card: #ffffff;
+  --clean-border: #cbd5e1;
+  --clean-text: #0f172a;
+}
+
+[data-theme="clean"] body,
+.theme-clean body,
+[data-theme="clean"] {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+[data-theme="clean"] .bg-zinc-950,
+.theme-clean .bg-zinc-950 {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+[data-theme="clean"] .bg-zinc-900,
+[data-theme="clean"] .bg-zinc-900\/90,
+[data-theme="clean"] .bg-zinc-900\/80,
+[data-theme="clean"] .bg-zinc-900\/70,
+[data-theme="clean"] .bg-zinc-900\/60,
+[data-theme="clean"] .bg-zinc-900\/50,
+.theme-clean .bg-zinc-900 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+[data-theme="clean"] .bg-zinc-800,
+.theme-clean .bg-zinc-800 {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+[data-theme="clean"] .border-zinc-800,
+[data-theme="clean"] .border-zinc-800\/80,
+[data-theme="clean"] .border-zinc-800\/60,
+.theme-clean .border-zinc-800 {
+  border-color: #cbd5e1 !important;
+}
+
+[data-theme="clean"] .border-zinc-700,
+.theme-clean .border-zinc-700 {
+  border-color: #94a3b8 !important;
+}
+
+[data-theme="clean"] .text-white,
+.theme-clean .text-white {
+  color: #0f172a !important;
+}
+
+[data-theme="clean"] .text-zinc-200,
+[data-theme="clean"] .text-zinc-300,
+.theme-clean .text-zinc-200,
+.theme-clean .text-zinc-300 {
+  color: #1e293b !important;
+}
+
+[data-theme="clean"] .text-zinc-400,
+.theme-clean .text-zinc-400 {
+  color: #475569 !important;
+}
+
+[data-theme="clean"] .text-zinc-500,
+.theme-clean .text-zinc-500 {
+  color: #64748b !important;
+}
+
+[data-theme="clean"] input,
+[data-theme="clean"] select,
+[data-theme="clean"] textarea,
+.theme-clean input,
+.theme-clean select,
+.theme-clean textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+[data-theme="clean"] input::placeholder,
+.theme-clean input::placeholder {
+  color: #94a3b8 !important;
+}
+
+[data-theme="clean"] ::-webkit-scrollbar-track,
+.theme-clean ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+[data-theme="clean"] ::-webkit-scrollbar-thumb,
+.theme-clean ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+

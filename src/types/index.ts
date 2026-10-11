@@ -1,4 +1,5 @@
 export type UserRole = 'superadmin' | 'admin' | 'pelanggan';
+export type ThemePreference = 'midnight' | 'clean';
 
 export interface User {
   id: string;
@@ -11,6 +12,7 @@ export interface User {
   createdAt: string;
   lastLogin?: string;
   customerId?: string; // Links to customer record if role is pelanggan
+  themePreference?: ThemePreference;
 }
 
 export type CustomerStatus = 'active' | 'isolated' | 'pending' | 'inactive';
