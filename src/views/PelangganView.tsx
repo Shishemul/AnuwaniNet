@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Customer, InternetPackage } from '../types';
 import {
   Users,
@@ -15,12 +15,22 @@ import {
   CheckCircle,
   AlertCircle,
   ExternalLink,
-  FileText
+  FileText,
+  Filter,
+  X,
+  RotateCcw,
+  SlidersHorizontal,
+  ArrowUpDown,
+  UserCheck,
+  UserX,
+  Clock,
+  Router
 } from 'lucide-react';
 import { RuijieService } from '../services/ruijieService';
 import { WhatsAppService } from '../services/whatsappService';
 import { DataService } from '../services/dataService';
 import { WhatsAppTemplateModal } from '../components/modals/WhatsAppTemplateModal';
+import { RuijieImportModal } from '../components/modals/RuijieImportModal';
 
 interface PelangganViewProps {
   customers: Customer[];
@@ -39,22 +49,60 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'isolated' | 'pending'>('all');
+  const [packageFilter, setPackageFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'name_asc' | 'name_desc' | 'join_desc' | 'billing_day'>('name_asc');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showRuijieImportModal, setShowRuijieImportModal] = useState(false);
   const [selectedCustomerForTemplate, setSelectedCustomerForTemplate] = useState<Customer | null>(null);
 
-  const filteredCustomers = customers.filter(c => {
-    const matchSearch =
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.customerCode.toLowerCase().includes(search.toLowerCase()) ||
-      c.phone.includes(search) ||
-      c.pppoeUsername.toLowerCase().includes(search.toLowerCase()) ||
-      c.address.toLowerCase().includes(search.toLowerCase());
+  // Status metrics counts
+  const activeCount = useMemo(() => customers.filter(c => c.status === 'active').length, [customers]);
+  const isolatedCount = useMemo(() => customers.filter(c => c.status === 'isolated').length, [customers]);
+  const pendingCount = useMemo(() => customers.filter(c => c.status === 'pending').length, [customers]);
 
-    const matchStatus = statusFilter === 'all' || c.status === statusFilter;
+  const isFiltered = Boolean(search.trim() || statusFilter !== 'all' || packageFilter !== 'all');
 
-    return matchSearch && matchStatus;
-  });
+  const handleResetFilters = () => {
+    setSearch('');
+    setStatusFilter('all');
+    setPackageFilter('all');
+    setSortBy('name_asc');
+  };
+
+  // Filter and sort customer list
+  const filteredCustomers = useMemo(() => {
+    return customers
+      .filter(c => {
+        // Search by Name, Phone Number, Customer Code, PPPoE username, or Address
+        const query = search.toLowerCase().trim();
+        const cleanQueryDigits = query.replace(/\D/g, '');
+        const cleanPhoneDigits = c.phone.replace(/\D/g, '');
+
+        const matchesName = c.name.toLowerCase().includes(query);
+        const matchesPhone = c.phone.toLowerCase().includes(query) || (cleanQueryDigits.length > 2 && cleanPhoneDigits.includes(cleanQueryDigits));
+        const matchesCode = c.customerCode.toLowerCase().includes(query);
+        const matchesPppoe = (c.pppoeUsername || '').toLowerCase().includes(query);
+        const matchesAddress = (c.address || '').toLowerCase().includes(query);
+
+        const matchesSearch = !query || matchesName || matchesPhone || matchesCode || matchesPppoe || matchesAddress;
+
+        // Filter by Status: all | active | isolated | pending
+        const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
+
+        // Filter by Package
+        const matchesPackage = packageFilter === 'all' || c.packageId === packageFilter;
+
+        return matchesSearch && matchesStatus && matchesPackage;
+      })
+      .sort((a, b) => {
+        if (sortBy === 'name_asc') return a.name.localeCompare(b.name, 'id');
+        if (sortBy === 'name_desc') return b.name.localeCompare(a.name, 'id');
+        if (sortBy === 'join_desc') return (b.joinDate || '').localeCompare(a.joinDate || '');
+        if (sortBy === 'billing_day') return (a.billingDay || 0) - (b.billingDay || 0);
+        return 0;
+      });
+  }, [customers, search, statusFilter, packageFilter, sortBy]);
 
   const handleManualIsolir = (c: Customer) => {
     if (confirm(`Apakah Anda yakin ingin MENGISOLIR layanan ${c.name} (${c.customerCode}) pada Ruijie Gateway?`)) {
@@ -117,7 +165,16 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => setShowRuijieImportModal(true)}
+            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-700 hover:border-red-600/60 text-white hover:bg-zinc-800 transition-colors shadow-sm"
+            title="Import dan sinkronisasi akun pelanggan PPPoE langsung dari router Ruijie Gateway / Reyee Cloud & simpan ke database"
+          >
+            <Router className="w-4 h-4 text-red-500" />
+            <span>Import dari Ruijie</span>
+          </button>
+
           <button
             onClick={() => {
               setSelectedCustomerForTemplate(customers[0] || null);
@@ -147,54 +204,215 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
         </div>
       )}
 
-      {/* Filter & Search Bar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Cari nama, ID Pelanggan (ANW-001), HP, PPPoE..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-600"
-          />
+      {/* Status Overview Metric Chips */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <button
+          type="button"
+          onClick={() => setStatusFilter('all')}
+          className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'all'
+              ? 'bg-zinc-800/80 border-zinc-700 shadow-sm'
+              : 'bg-zinc-900/60 border-zinc-800/80 hover:bg-zinc-800/40'
+          }`}
+        >
+          <div className="flex items-center justify-between text-zinc-400 text-xs">
+            <span>Total Pelanggan</span>
+            <Users className="w-4 h-4 text-zinc-400" />
+          </div>
+          <div className="text-xl font-bold font-mono text-white mt-1 tabular-nums">{customers.length}</div>
+          <div className="text-[10px] text-zinc-500 mt-0.5">Semua data terdaftar</div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('active')}
+          className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'active'
+              ? 'bg-emerald-950/40 border-emerald-800 shadow-sm'
+              : 'bg-zinc-900/60 border-zinc-800/80 hover:bg-zinc-800/40'
+          }`}
+        >
+          <div className="flex items-center justify-between text-emerald-400 text-xs">
+            <span>Aktif Normal</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          </div>
+          <div className="text-xl font-bold font-mono text-emerald-400 mt-1 tabular-nums">{activeCount}</div>
+          <div className="text-[10px] text-zinc-500 mt-0.5">Koneksi lancar Ruijie</div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('isolated')}
+          className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'isolated'
+              ? 'bg-red-950/40 border-red-800 shadow-sm'
+              : 'bg-zinc-900/60 border-zinc-800/80 hover:bg-zinc-800/40'
+          }`}
+        >
+          <div className="flex items-center justify-between text-red-400 text-xs">
+            <span>Terisolir</span>
+            <span className="w-2 h-2 rounded-full bg-red-500" />
+          </div>
+          <div className="text-xl font-bold font-mono text-red-400 mt-1 tabular-nums">{isolatedCount}</div>
+          <div className="text-[10px] text-zinc-500 mt-0.5">Menunggak / manual isolir</div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('pending')}
+          className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+            statusFilter === 'pending'
+              ? 'bg-amber-950/40 border-amber-800 shadow-sm'
+              : 'bg-zinc-900/60 border-zinc-800/80 hover:bg-zinc-800/40'
+          }`}
+        >
+          <div className="flex items-center justify-between text-amber-400 text-xs">
+            <span>Pending Aktivasi</span>
+            <Clock className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="text-xl font-bold font-mono text-amber-400 mt-1 tabular-nums">{pendingCount}</div>
+          <div className="text-[10px] text-zinc-500 mt-0.5">Menunggu verifikasi teknisi</div>
+        </button>
+      </div>
+
+      {/* Comprehensive Search & Filter Control Bar */}
+      <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-3">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+          {/* Main Search Input: Name, Phone number, Customer Code, PPPoE */}
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Cari berdasarkan nama pelanggan, nomor HP (08xx), ID pelanggan, atau PPPoE..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-10 pr-9 py-2.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-600 transition-colors"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-800 transition-colors cursor-pointer"
+                title="Hapus pencarian"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Filter Controls Grid */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Status Filter Dropdown */}
+            <div className="flex items-center gap-1.5 bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs">
+              <Filter className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+              <label htmlFor="filter-status-select" className="text-zinc-500 text-[11px] font-medium hidden sm:inline">Status:</label>
+              <select
+                id="filter-status-select"
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value as any)}
+                className="bg-transparent text-white font-medium focus:outline-none cursor-pointer pr-1 text-xs"
+              >
+                <option value="all" className="bg-zinc-900 text-white">Semua Status ({customers.length})</option>
+                <option value="active" className="bg-zinc-900 text-emerald-400">Aktif Normal ({activeCount})</option>
+                <option value="isolated" className="bg-zinc-900 text-red-400">Terisolir ({isolatedCount})</option>
+                <option value="pending" className="bg-zinc-900 text-amber-400">Pending Aktivasi ({pendingCount})</option>
+              </select>
+            </div>
+
+            {/* Package Filter Dropdown */}
+            <div className="flex items-center gap-1.5 bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs">
+              <Wifi className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+              <label htmlFor="filter-package-select" className="text-zinc-500 text-[11px] font-medium hidden sm:inline">Paket:</label>
+              <select
+                id="filter-package-select"
+                value={packageFilter}
+                onChange={e => setPackageFilter(e.target.value)}
+                className="bg-transparent text-white font-medium focus:outline-none cursor-pointer pr-1 text-xs max-w-[140px] truncate"
+              >
+                <option value="all" className="bg-zinc-900 text-white">Semua Paket</option>
+                {packages.map(p => (
+                  <option key={p.id} value={p.id} className="bg-zinc-900 text-white">
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Sort Order Selector */}
+            <div className="flex items-center gap-1.5 bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs">
+              <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value as any)}
+                className="bg-transparent text-white font-medium focus:outline-none cursor-pointer pr-1 text-xs"
+              >
+                <option value="name_asc" className="bg-zinc-900 text-white">Nama (A - Z)</option>
+                <option value="name_desc" className="bg-zinc-900 text-white">Nama (Z - A)</option>
+                <option value="join_desc" className="bg-zinc-900 text-white">Tgl Gabung (Terbaru)</option>
+                <option value="billing_day" className="bg-zinc-900 text-white">Jatuh Tempo (Tgl)</option>
+              </select>
+            </div>
+
+            {/* Reset Filter Button */}
+            {isFiltered && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="flex items-center gap-1 px-2.5 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-medium transition-colors cursor-pointer"
+                title="Reset seluruh filter dan kembalikan semua data pelanggan"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-red-400" />
+                <span className="hidden sm:inline">Reset</span>
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Status segmented tabs */}
-        <div className="flex items-center gap-1 p-1 bg-zinc-900 border border-zinc-800 rounded-lg text-xs self-start md:self-auto">
-          <button
-            onClick={() => setStatusFilter('all')}
-            className={`px-3 py-1.5 font-medium rounded-md transition-colors ${
-              statusFilter === 'all' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            Semua ({customers.length})
-          </button>
-          <button
-            onClick={() => setStatusFilter('active')}
-            className={`px-3 py-1.5 font-medium rounded-md transition-colors ${
-              statusFilter === 'active' ? 'bg-zinc-800 text-emerald-400 shadow-sm' : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            Aktif ({customers.filter(c => c.status === 'active').length})
-          </button>
-          <button
-            onClick={() => setStatusFilter('isolated')}
-            className={`px-3 py-1.5 font-medium rounded-md transition-colors ${
-              statusFilter === 'isolated' ? 'bg-zinc-800 text-red-400 shadow-sm' : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            Terisolir ({customers.filter(c => c.status === 'isolated').length})
-          </button>
-          <button
-            onClick={() => setStatusFilter('pending')}
-            className={`px-3 py-1.5 font-medium rounded-md transition-colors ${
-              statusFilter === 'pending' ? 'bg-zinc-800 text-amber-400 shadow-sm' : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            Pending ({customers.filter(c => c.status === 'pending').length})
-          </button>
+        {/* Active Filter Tags & Count Summary */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-800/60 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-zinc-500 font-medium">Filter Aktif:</span>
+            {statusFilter !== 'all' && (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold ${
+                statusFilter === 'active'
+                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                  : statusFilter === 'isolated'
+                  ? 'bg-red-950 text-red-400 border border-red-800'
+                  : 'bg-amber-950 text-amber-400 border border-amber-800'
+              }`}>
+                <span>Status: {statusFilter === 'active' ? 'Aktif' : statusFilter === 'isolated' ? 'Terisolir' : 'Pending'}</span>
+                <button type="button" onClick={() => setStatusFilter('all')} className="hover:opacity-75 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {search.trim() && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-800 text-zinc-200 border border-zinc-700">
+                <span>Pencarian: "{search}"</span>
+                <button type="button" onClick={() => setSearch('')} className="hover:opacity-75 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {packageFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-800 text-zinc-200 border border-zinc-700">
+                <span>Paket: {packages.find(p => p.id === packageFilter)?.name || packageFilter}</span>
+                <button type="button" onClick={() => setPackageFilter('all')} className="hover:opacity-75 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {!isFiltered && (
+              <span className="text-[11px] text-zinc-400 italic">Menampilkan semua pelanggan tanpa batasan filter</span>
+            )}
+          </div>
+
+          <div className="text-[11px] text-zinc-400 font-medium">
+            Menampilkan <strong className="text-white font-mono">{filteredCustomers.length}</strong> dari <span className="font-mono">{customers.length}</span> pelanggan
+          </div>
         </div>
       </div>
 
@@ -216,8 +434,30 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
             <tbody className="divide-y divide-zinc-800/60">
               {filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-zinc-500">
-                    Tidak ditemukan data pelanggan yang cocok.
+                  <td colSpan={7} className="py-12 text-center text-zinc-500">
+                    <div className="space-y-2 max-w-sm mx-auto">
+                      <div className="w-10 h-10 rounded-full bg-zinc-800/80 text-zinc-400 flex items-center justify-center mx-auto">
+                        <Search className="w-5 h-5" />
+                      </div>
+                      <div className="text-white font-semibold text-sm">Tidak ditemukan data pelanggan</div>
+                      <p className="text-xs text-zinc-400">
+                        Tidak ada pelanggan yang cocok dengan pencarian{' '}
+                        {search ? <strong className="text-white">"{search}"</strong> : ''}{' '}
+                        {statusFilter !== 'all' ? `dan status "${statusFilter}"` : ''}.
+                      </p>
+                      {isFiltered && (
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={handleResetFilters}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white transition-colors cursor-pointer"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-red-400" />
+                            <span>Reset Semua Filter</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -378,6 +618,18 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
           }
         }}
         onTemplatesUpdated={onRefreshData}
+      />
+
+      {/* Ruijie Customer Import Modal */}
+      <RuijieImportModal
+        isOpen={showRuijieImportModal}
+        onClose={() => setShowRuijieImportModal(false)}
+        packages={packages}
+        onImportSuccess={(count) => {
+          setActionMessage(`Berhasil mengimpor ${count} data pelanggan dari Ruijie Gateway dan data telah tersimpan di Database!`);
+          onRefreshData();
+          setTimeout(() => setActionMessage(null), 5000);
+        }}
       />
     </div>
   );

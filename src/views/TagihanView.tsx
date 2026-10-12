@@ -14,11 +14,13 @@ import {
   DollarSign,
   CreditCard,
   BellRing,
-  FileText
+  FileText,
+  Download
 } from 'lucide-react';
 import { WhatsAppService } from '../services/whatsappService';
 import { DataService } from '../services/dataService';
 import { DanaService } from '../services/danaService';
+import { ReportService } from '../services/reportService';
 import { WhatsAppTemplateModal } from '../components/modals/WhatsAppTemplateModal';
 import { BulkGenerateBillsModal } from '../components/modals/BulkGenerateBillsModal';
 
@@ -140,10 +142,28 @@ export const TagihanView: React.FC<TagihanViewProps> = ({
       {/* Header & Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-zinc-800">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Receipt className="w-6 h-6 text-red-500" />
-            Pemantauan Tagihan Bulanan
-          </h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+              <Receipt className="w-6 h-6 text-red-500" />
+              Pemantauan Tagihan Bulanan
+            </h1>
+            {DataService.getAppSettings().autoGenerateBillsEnabled ? (
+              <span
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800"
+                title="Auto-Generate Bills aktif di Pengaturan: tagihan dibuat otomatis setiap awal bulan"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Auto-Generate: AKTIF
+              </span>
+            ) : (
+              <span
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700"
+                title="Auto-Generate Bills dinonaktifkan di Pengaturan: generate massal manual"
+              >
+                Auto-Generate: Manual
+              </span>
+            )}
+          </div>
           <p className="text-xs sm:text-sm text-zinc-400">
             Pencatatan pembayaran, kuitansi WhatsApp otomatis, dan status jatuh tempo.
           </p>
@@ -177,6 +197,24 @@ export const TagihanView: React.FC<TagihanViewProps> = ({
           >
             <BellRing className="w-4 h-4 text-emerald-400" />
             <span>Auto-Reminder Bot WA</span>
+          </button>
+
+          {/* Export PDF Tagihan */}
+          <button
+            onClick={() => {
+              ReportService.exportBillsToPdf(
+                filteredBills,
+                periodFilter === 'all' ? 'Semua Periode' : periodFilter,
+                `Laporan_Tagihan_${periodFilter === 'all' ? 'Semua' : periodFilter}.pdf`
+              );
+              setNotificationStatus(`Berhasil mengekspor ${filteredBills.length} data tagihan ke format PDF siap cetak!`);
+              setTimeout(() => setNotificationStatus(null), 4000);
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-rose-950 border border-rose-850 text-rose-300 hover:bg-rose-900 transition-colors shadow-sm"
+            title="Ekspor seluruh tagihan yang terfilter saat ini ke format PDF profesional siap cetak"
+          >
+            <Download className="w-4 h-4 text-rose-400" />
+            <span>Export PDF</span>
           </button>
 
           <button

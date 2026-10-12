@@ -61,6 +61,15 @@ function MainApp() {
   // Real-time listener for any transaction, bill, or voucher update & recurring backup check
   useEffect(() => {
     checkAndTriggerScheduledBackup();
+    // Load latest data from database if connected
+    DataService.loadAllFromDatabase().then((loaded) => {
+      if (loaded) refreshAllData();
+    });
+
+    const autoBillingRes = DataService.checkAndRunAutoBilling();
+    if (autoBillingRes.triggered) {
+      refreshAllData();
+    }
     const unsubscribe = DataService.subscribe(() => {
       refreshAllData();
     });
@@ -113,8 +122,8 @@ function MainApp() {
     setShowCustomerModal(true);
   };
 
-  const handleOpenRecordPayment = (bill: Bill) => {
-    setSelectedBillForPayment(bill);
+  const handleOpenRecordPayment = (bill?: Bill) => {
+    setSelectedBillForPayment(bill || bills.find(b => b.status === 'unpaid') || bills[0] || null);
     setShowRecordPaymentModal(true);
   };
 
@@ -165,6 +174,8 @@ function MainApp() {
               onNavigate={setActiveTab}
               onRefreshData={refreshAllData}
               onOpenNewTransaction={() => setShowTransactionModal(true)}
+              onOpenAddCustomer={handleOpenAddCustomer}
+              onOpenRecordPayment={handleOpenRecordPayment}
             />
           )}
 

@@ -5,11 +5,32 @@ import { WhatsAppService } from './whatsappService';
 export interface RuijieExecutionLog {
   id: string;
   timestamp: string;
-  action: 'auto_isolir' | 'manual_isolir' | 'restore_service' | 'sync_vouchers' | 'reboot_device';
+  action: 'auto_isolir' | 'manual_isolir' | 'restore_service' | 'sync_vouchers' | 'reboot_device' | 'import_customers';
   customerName?: string;
   customerCode?: string;
   status: 'success' | 'failed';
   details: string;
+}
+
+export interface DiscoveredRuijieCustomer {
+  customerCode: string;
+  name: string;
+  phone: string;
+  address: string;
+  email?: string;
+  pppoeUsername: string;
+  pppoePassword: string;
+  ipAddress: string;
+  macAddress: string;
+  packageId: string;
+  packageName: string;
+  packagePrice: number;
+  status: 'active' | 'isolated' | 'pending';
+  ruijieDeviceId: string;
+  billingDay: number;
+  rateLimit: string;
+  isExisting: boolean;
+  notes?: string;
 }
 
 const STORAGE_KEY_RUIJIE_LOGS = 'anw_ruijie_execution_logs';
@@ -214,6 +235,363 @@ export class RuijieService {
       success: true,
       latencyMs: Math.floor(Math.random() * 25) + 15,
       message: `Terhubung dengan Ruijie Reyee Cloud API (AppID: ${key.slice(0, 8)}***, Site: ${config.siteId}). Status: HTTP 200 OK Cloud Authorized.`
+    };
+  }
+
+  // 6. Tarik Data Pelanggan Langsung dari Ruijie Gateway RG-EG3250 & Reyee Cloud
+  static async fetchCustomersFromRuijieGateway(): Promise<{
+    success: boolean;
+    customers: DiscoveredRuijieCustomer[];
+    message: string;
+    gatewayInfo: { model: string; ip: string; siteId: string; totalDetected: number };
+  }> {
+    // Simulated live discovery handshake with Ruijie Gateway & Reyee Cloud
+    await new Promise(r => setTimeout(r, 700));
+
+    const config = DataService.getRuijieConfig();
+    const existingCustomers = DataService.getCustomers();
+    const packages = DataService.getPackages();
+
+    const pkg1 = packages.find(p => p.id === 'pkg-1') || { id: 'pkg-1', name: 'Paket Hemat 10 Mbps', price: 100000 };
+    const pkg2 = packages.find(p => p.id === 'pkg-2') || { id: 'pkg-2', name: 'Paket Keluarga 20 Mbps', price: 165000 };
+    const pkg3 = packages.find(p => p.id === 'pkg-3') || { id: 'pkg-3', name: 'Paket Gamers Pro 50 Mbps', price: 275000 };
+
+    // Ruijie Gateway discovered PPPoE client database pool
+    const mockGatewayPool = [
+      {
+        customerCode: 'ANW-006',
+        name: 'Nanda Pratama',
+        phone: '081298112233',
+        address: 'Jl. Flamboyan Blok B No. 14, RT 01 / RW 05',
+        email: 'nanda.pratama@gmail.com',
+        pppoeUsername: 'nanda_anw006',
+        pppoePassword: 'passNanda2026',
+        ipAddress: '192.168.10.22',
+        macAddress: '74:D0:2B:44:81:90',
+        packageId: pkg2.id,
+        packageName: pkg2.name,
+        packagePrice: pkg2.price,
+        status: 'active' as const,
+        ruijieDeviceId: 'dev-1',
+        billingDay: 20,
+        rateLimit: '20M / 10M (Up/Down)',
+        notes: 'Terdeteksi di Port LAN 3 Ruijie Gateway - Profil PPPOE_20M'
+      },
+      {
+        customerCode: 'ANW-007',
+        name: 'Farhan Alamsyah',
+        phone: '085611224455',
+        address: 'Komplek Permata Hijau Kav. 09, RT 03 / RW 02',
+        email: 'farhan.alam@yahoo.com',
+        pppoeUsername: 'farhan_anw007',
+        pppoePassword: 'passFarhan2026',
+        ipAddress: '192.168.10.23',
+        macAddress: '3C:52:82:11:98:AA',
+        packageId: pkg3.id,
+        packageName: pkg3.name,
+        packagePrice: pkg3.price,
+        status: 'active' as const,
+        ruijieDeviceId: 'dev-1',
+        billingDay: 20,
+        rateLimit: '50M / 25M (Gaming Priority)',
+        notes: 'Ruijie Cloud Static IP Assigned - Profil PPPOE_50M'
+      },
+      {
+        customerCode: 'ANW-008',
+        name: 'Maya Anggraini',
+        phone: '087799001122',
+        address: 'Jl. Kenanga Timur No. 27, RT 02 / RW 03',
+        email: 'maya.anggraini@outlook.com',
+        pppoeUsername: 'maya_anw008',
+        pppoePassword: 'passMaya2026',
+        ipAddress: '192.168.10.24',
+        macAddress: '90:B6:86:E0:44:12',
+        packageId: pkg1.id,
+        packageName: pkg1.name,
+        packagePrice: pkg1.price,
+        status: 'active' as const,
+        ruijieDeviceId: 'dev-1',
+        billingDay: 20,
+        rateLimit: '10M / 5M (Basic)',
+        notes: 'Terdaftar di Reyee Cloud eWeb - ODP-02 Port 5'
+      },
+      {
+        customerCode: 'ANW-009',
+        name: 'Dimas Setiawan',
+        phone: '081344556677',
+        address: 'Perum Graha Indah Blok D-11',
+        email: 'dimas.setiawan@gmail.com',
+        pppoeUsername: 'dimas_anw009',
+        pppoePassword: 'passDimas2026',
+        ipAddress: '192.168.10.25',
+        macAddress: '14:CC:20:77:88:51',
+        packageId: pkg2.id,
+        packageName: pkg2.name,
+        packagePrice: pkg2.price,
+        status: 'active' as const,
+        ruijieDeviceId: 'dev-1',
+        billingDay: 20,
+        rateLimit: '20M / 10M (Up/Down)',
+        notes: 'Koneksi ONT ZTE via Ruijie VLAN 100'
+      },
+      {
+        customerCode: 'ANW-010',
+        name: 'Dina Kusumawati',
+        phone: '082211447788',
+        address: 'Jl. Cendrawasih Gang 2 No. 5',
+        email: 'dina.kusuma@gmail.com',
+        pppoeUsername: 'dina_anw010',
+        pppoePassword: 'passDina2026',
+        ipAddress: '192.168.10.26',
+        macAddress: '68:D7:9A:33:51:77',
+        packageId: pkg1.id,
+        packageName: pkg1.name,
+        packagePrice: pkg1.price,
+        status: 'pending' as const,
+        ruijieDeviceId: 'dev-1',
+        billingDay: 20,
+        rateLimit: '10M / 5M',
+        notes: 'Akun baru ditambahkan di Ruijie eWeb, menunggu aktivasi'
+      },
+      {
+        customerCode: 'ANW-011',
+        name: 'Wahyu Hidayat',
+        phone: '085811335577',
+        address: 'Jl. Dahlia Raya RT 05 / RW 01',
+        email: 'wahyu.hidayat@gmail.com',
+        pppoeUsername: 'wahyu_anw011',
+        pppoePassword: 'passWahyu2026',
+        ipAddress: '192.168.10.27',
+        macAddress: 'BC:D0:74:99:11:44',
+        packageId: pkg2.id,
+        packageName: pkg2.name,
+        packagePrice: pkg2.price,
+        status: 'active' as const,
+        ruijieDeviceId: 'dev-1',
+        billingDay: 20,
+        rateLimit: '20M / 10M',
+        notes: 'Ruijie Reyee Hotspot / PPPoE Client - Signal -18dBm'
+      }
+    ];
+
+    const discovered: DiscoveredRuijieCustomer[] = mockGatewayPool.map(item => {
+      const isExisting = existingCustomers.some(
+        c => c.pppoeUsername.toLowerCase() === item.pppoeUsername.toLowerCase() ||
+             c.customerCode.toLowerCase() === item.customerCode.toLowerCase()
+      );
+      return {
+        ...item,
+        isExisting
+      };
+    });
+
+    return {
+      success: true,
+      customers: discovered,
+      message: `Berhasil memindai gateway Ruijie Reyee! Ditemukan ${discovered.length} akun pelanggan PPPoE (${discovered.filter(d => !d.isExisting).length} pelanggan baru).`,
+      gatewayInfo: {
+        model: 'Ruijie Gateway RG-EG3250',
+        ip: '192.168.10.1',
+        siteId: config.siteId || 'SITE-ANUWANI-01',
+        totalDetected: discovered.length
+      }
+    };
+  }
+
+  // 7. Parse File Export Ruijie (CSV / JSON)
+  static parseRuijieFile(content: string, format: 'csv' | 'json'): {
+    success: boolean;
+    customers: DiscoveredRuijieCustomer[];
+    error?: string;
+  } {
+    const existingCustomers = DataService.getCustomers();
+    const packages = DataService.getPackages();
+    const defaultPkg = packages[0] || { id: 'pkg-1', name: 'Paket Hemat 10 Mbps', price: 100000 };
+
+    try {
+      if (format === 'json') {
+        const rawJson = JSON.parse(content);
+        const list = Array.isArray(rawJson) ? rawJson : (rawJson.users || rawJson.clients || rawJson.data || []);
+        
+        const mapped: DiscoveredRuijieCustomer[] = list.map((item: any, idx: number) => {
+          const pppoeUsername = item.username || item.pppoeUsername || item.pppoe_username || `user_rj_${Date.now()}_${idx}`;
+          const isExisting = existingCustomers.some(c => c.pppoeUsername.toLowerCase() === pppoeUsername.toLowerCase());
+          const matchedPkg = packages.find(p => p.id === item.packageId || p.name.toLowerCase().includes((item.packageName || item.package || '').toLowerCase())) || defaultPkg;
+
+          return {
+            customerCode: item.customerCode || item.code || `ANW-${String(existingCustomers.length + idx + 1).padStart(3, '0')}`,
+            name: item.name || item.customerName || `Pelanggan Ruijie ${idx + 1}`,
+            phone: item.phone || item.no_hp || '081200000000',
+            address: item.address || item.alamat || 'Alamat Belum Terdata',
+            email: item.email || undefined,
+            pppoeUsername,
+            pppoePassword: item.password || item.pppoePassword || '123456',
+            ipAddress: item.ip || item.ipAddress || item.ip_address || `192.168.10.${30 + idx}`,
+            macAddress: item.mac || item.macAddress || item.mac_address || 'AA:BB:CC:DD:EE:FF',
+            packageId: matchedPkg.id,
+            packageName: matchedPkg.name,
+            packagePrice: matchedPkg.price,
+            status: (item.status === 'isolated' || item.status === 'pending') ? item.status : 'active',
+            ruijieDeviceId: item.ruijieDeviceId || 'dev-1',
+            billingDay: Number(item.billingDay || item.billing_day || 20),
+            rateLimit: item.rateLimit || `${matchedPkg.speedMbps} Mbps`,
+            isExisting,
+            notes: item.notes || 'Diimpor dari file Ruijie Reyee JSON'
+          };
+        });
+
+        return { success: true, customers: mapped };
+      }
+
+      // CSV parsing
+      const lines = content.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length < 2) {
+        return { success: false, customers: [], error: 'File CSV kosong atau tidak memiliki baris data.' };
+      }
+
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+      const getVal = (cols: string[], possibleHeaders: string[]) => {
+        for (const ph of possibleHeaders) {
+          const idx = headers.indexOf(ph);
+          if (idx >= 0 && cols[idx] !== undefined) {
+            return cols[idx].trim().replace(/^["']|["']$/g, '');
+          }
+        }
+        return '';
+      };
+
+      const result: DiscoveredRuijieCustomer[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line) continue;
+        const cols = line.split(',');
+        if (cols.length < 2) continue;
+
+        const pppoeUsername = getVal(cols, ['username', 'pppoe_username', 'pppoeusername', 'user']) || `user_rj_${i}`;
+        const name = getVal(cols, ['name', 'nama', 'customer_name', 'customername']) || `Pelanggan Ruijie ${i}`;
+        const phone = getVal(cols, ['phone', 'no_hp', 'telepon', 'mobile']) || '081200000000';
+        const address = getVal(cols, ['address', 'alamat', 'lokasi']) || 'Alamat Ruijie';
+        const password = getVal(cols, ['password', 'pppoe_password', 'pass']) || '123456';
+        const ip = getVal(cols, ['ip', 'ip_address', 'ipaddress']) || `192.168.10.${30 + i}`;
+        const mac = getVal(cols, ['mac', 'mac_address', 'macaddress']) || '00:1A:2B:3C:4D:5E';
+        const pkgName = getVal(cols, ['package', 'paket', 'profile', 'package_name']);
+        const statusVal = getVal(cols, ['status']).toLowerCase();
+
+        const matchedPkg = packages.find(p => p.name.toLowerCase().includes(pkgName.toLowerCase())) || defaultPkg;
+        const isExisting = existingCustomers.some(c => c.pppoeUsername.toLowerCase() === pppoeUsername.toLowerCase());
+
+        result.push({
+          customerCode: getVal(cols, ['code', 'customer_code', 'id']) || `ANW-${String(existingCustomers.length + i).padStart(3, '0')}`,
+          name,
+          phone,
+          address,
+          email: getVal(cols, ['email']),
+          pppoeUsername,
+          pppoePassword: password,
+          ipAddress: ip,
+          macAddress: mac,
+          packageId: matchedPkg.id,
+          packageName: matchedPkg.name,
+          packagePrice: matchedPkg.price,
+          status: statusVal === 'isolated' || statusVal === 'pending' ? statusVal : 'active',
+          ruijieDeviceId: 'dev-1',
+          billingDay: 20,
+          rateLimit: `${matchedPkg.speedMbps} Mbps`,
+          isExisting,
+          notes: 'Diimpor dari file Ruijie Reyee CSV'
+        });
+      }
+
+      return { success: true, customers: result };
+    } catch (err: any) {
+      return { success: false, customers: [], error: err?.message || 'Gagal memproses file Ruijie.' };
+    }
+  }
+
+  // 8. Generate Template Contoh CSV untuk Import Ruijie
+  static generateRuijieSampleCsv(): string {
+    return `username,password,name,phone,address,ip_address,mac_address,package_name,status
+ahmad_rj01,passAhmad2026,Ahmad Supriyadi,081299887711,Jl. Melati No. 10 RT 01/02,192.168.10.40,E4:AA:5D:89:12:01,Paket Keluarga 20 Mbps,active
+rina_rj02,passRina2026,Rina Marlina,085712349988,Komplek Griya Asri Blok A-3,192.168.10.41,BC:30:7D:99:44:11,Paket Hemat 10 Mbps,active
+joko_rj03,passJoko2026,Joko Widodo,082188990022,Jl. Anggrek RT 04/05 No. 88,192.168.10.42,70:85:C2:55:77:88,Paket Gamers Pro 50 Mbps,active`;
+  }
+
+  // 9. Eksekusi Impor Pelanggan Ruijie & Simpan ke Database
+  static importCustomers(
+    selectedCustomers: DiscoveredRuijieCustomer[],
+    options: { saveToDatabase?: boolean } = { saveToDatabase: true }
+  ): {
+    success: boolean;
+    importedCount: number;
+    updatedCount: number;
+    message: string;
+  } {
+    if (!selectedCustomers.length) {
+      return {
+        success: false,
+        importedCount: 0,
+        updatedCount: 0,
+        message: 'Tidak ada pelanggan yang dipilih untuk diimpor.'
+      };
+    }
+
+    const currentCustomers = DataService.getCustomers();
+    let importedCount = 0;
+    let updatedCount = 0;
+
+    selectedCustomers.forEach(item => {
+      const existingIdx = currentCustomers.findIndex(
+        c => c.pppoeUsername.toLowerCase() === item.pppoeUsername.toLowerCase() ||
+             c.customerCode.toLowerCase() === item.customerCode.toLowerCase()
+      );
+
+      const customerObj: Customer = {
+        id: existingIdx >= 0 ? currentCustomers[existingIdx].id : `cust-rj-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        customerCode: item.customerCode,
+        name: item.name,
+        phone: item.phone,
+        address: item.address,
+        email: item.email || `${item.pppoeUsername}@gmail.com`,
+        pppoeUsername: item.pppoeUsername,
+        pppoePassword: item.pppoePassword,
+        ipAddress: item.ipAddress,
+        macAddress: item.macAddress,
+        packageId: item.packageId,
+        packageName: item.packageName,
+        packagePrice: item.packagePrice,
+        status: item.status,
+        autoIsolirEnabled: true,
+        billingDay: item.billingDay || 20,
+        joinDate: new Date().toISOString().slice(0, 10),
+        ruijieDeviceId: item.ruijieDeviceId || 'dev-1',
+        notes: item.notes || 'Diimpor langsung dari Ruijie Gateway EG3250'
+      };
+
+      if (existingIdx >= 0) {
+        currentCustomers[existingIdx] = { ...currentCustomers[existingIdx], ...customerObj };
+        updatedCount++;
+      } else {
+        currentCustomers.push(customerObj);
+        importedCount++;
+      }
+    });
+
+    // Simpan data pelanggan secara permanen
+    // Method DataService.saveCustomers() otomatis menyimpan ke local database dan menyinkronkan ke Supabase table 'anuwani_customers'
+    DataService.saveCustomers(currentCustomers);
+
+    // Catat ke Log Eksekusi Ruijie
+    this.addLog({
+      action: 'import_customers',
+      status: 'success',
+      details: `Impor pelanggan dari Ruijie berhasil: ${importedCount} pelanggan baru ditambahkan, ${updatedCount} pelanggan diperbarui. Disimpan ke Database.`
+    });
+
+    return {
+      success: true,
+      importedCount,
+      updatedCount,
+      message: `Berhasil mengimpor ${importedCount} pelanggan baru dan memperbarui ${updatedCount} pelanggan dari Ruijie. Data telah tersimpan di Database!`
     };
   }
 }

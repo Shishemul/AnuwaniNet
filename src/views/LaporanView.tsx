@@ -88,11 +88,31 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
     setTimeout(() => setActionNotice(null), 4000);
   };
 
+  const handleExportPdf = () => {
+    const filename = `Laporan_Transaksi_AnuwaniNet_${reportType.toUpperCase()}_${selectedDate || 'Semua'}.pdf`;
+    ReportService.exportTransactionsToPdf(
+      reportData.transactions,
+      summary,
+      `${reportType.toUpperCase()} - ${selectedDate || 'Semua Periode'}`,
+      filename
+    );
+    setActionNotice(`Laporan transaksi ${reportType} (${selectedDate}) berhasil diekspor ke format PDF siap cetak!`);
+    setTimeout(() => setActionNotice(null), 4000);
+  };
+
   // Specific Direct Exports
-  const handleExportSpecific = (type: 'daily' | 'monthly' | 'yearly' | 'all', dateVal: string, format: 'xlsx' | 'csv') => {
+  const handleExportSpecific = (type: 'daily' | 'monthly' | 'yearly' | 'all', dateVal: string, format: 'xlsx' | 'csv' | 'pdf') => {
     const targetData = ReportService.calculateReport(type, dateVal);
     const label = type === 'daily' ? `Harian_${dateVal}` : type === 'monthly' ? `Bulanan_${dateVal}` : type === 'yearly' ? `Tahunan_${dateVal}` : 'Seluruh_Data';
-    if (format === 'xlsx') {
+    if (format === 'pdf') {
+      ReportService.exportTransactionsToPdf(
+        targetData.transactions,
+        targetData.summary,
+        label.replace(/_/g, ' '),
+        `Laporan_Transaksi_AnuwaniNet_${label}.pdf`
+      );
+      setActionNotice(`Laporan transaksi ${label} berhasil diekspor ke PDF!`);
+    } else if (format === 'xlsx') {
       ReportService.exportTransactionsToExcel(
         targetData.transactions,
         `Laporan_Transaksi_AnuwaniNet_${label}.xlsx`,
@@ -125,6 +145,16 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
       `Laporan_Tagihan_Pelanggan_AnuwaniNet.xlsx`
     );
     setActionNotice('Laporan tagihan pelanggan berhasil diunduh dalam format Excel (.xlsx)!');
+    setTimeout(() => setActionNotice(null), 4000);
+  };
+
+  const handleExportBillsPdf = () => {
+    ReportService.exportBillsToPdf(
+      bills,
+      `Semua Tagihan (${bills.length} Lembar)`,
+      `Laporan_Tagihan_Pelanggan_AnuwaniNet.pdf`
+    );
+    setActionNotice('Laporan tagihan pelanggan berhasil diekspor ke format PDF siap cetak!');
     setTimeout(() => setActionNotice(null), 4000);
   };
 
@@ -179,6 +209,15 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
           >
             <Plus className="w-4 h-4" />
             <span>+ Catat Pengeluaran Kas</span>
+          </button>
+
+          <button
+            onClick={handleExportPdf}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-rose-950 border border-rose-850 text-rose-300 hover:bg-rose-900 transition-colors shadow-sm"
+            title="Unduh laporan transaksi dalam format PDF profesional siap cetak menggunakan jsPDF"
+          >
+            <Download className="w-4 h-4 text-rose-400" />
+            <span>Export PDF (jsPDF)</span>
           </button>
 
           <button
@@ -239,17 +278,25 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
             <p className="text-[11px] text-zinc-400 leading-tight">
               Rekap mutasi transaksi per hari untuk tutup buku kas harian.
             </p>
-            <div className="grid grid-cols-2 gap-1.5 pt-1">
+            <div className="grid grid-cols-3 gap-1 pt-1">
+              <button
+                onClick={() => handleExportSpecific('daily', '2026-10-10', 'pdf')}
+                className="py-1.5 px-1.5 rounded-lg bg-rose-950 border border-rose-800 text-rose-300 hover:bg-rose-900 text-[11px] font-semibold flex items-center justify-center gap-1"
+                title="Ekspor PDF Harian Siap Cetak"
+              >
+                <Download className="w-3 h-3 text-rose-400" />
+                <span>PDF</span>
+              </button>
               <button
                 onClick={() => handleExportSpecific('daily', '2026-10-10', 'xlsx')}
-                className="py-1.5 px-2 rounded-lg bg-emerald-950 border border-emerald-800/80 text-emerald-300 hover:bg-emerald-900 text-[11px] font-semibold flex items-center justify-center gap-1"
+                className="py-1.5 px-1.5 rounded-lg bg-emerald-950 border border-emerald-800/80 text-emerald-300 hover:bg-emerald-900 text-[11px] font-semibold flex items-center justify-center gap-1"
               >
                 <Download className="w-3 h-3" />
                 <span>Excel</span>
               </button>
               <button
                 onClick={() => handleExportSpecific('daily', '2026-10-10', 'csv')}
-                className="py-1.5 px-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 text-[11px] font-semibold flex items-center justify-center gap-1"
+                className="py-1.5 px-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 text-[11px] font-semibold flex items-center justify-center gap-1"
               >
                 <Download className="w-3 h-3 text-zinc-400" />
                 <span>CSV</span>
@@ -269,17 +316,25 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
             <p className="text-[11px] text-zinc-400 leading-tight">
               Rekap omset tagihan & voucher, beban operasional, dan margin laba.
             </p>
-            <div className="grid grid-cols-2 gap-1.5 pt-1">
+            <div className="grid grid-cols-3 gap-1 pt-1">
+              <button
+                onClick={() => handleExportSpecific('monthly', '2026-10', 'pdf')}
+                className="py-1.5 px-1.5 rounded-lg bg-rose-950 border border-rose-800 text-rose-300 hover:bg-rose-900 text-[11px] font-semibold flex items-center justify-center gap-1"
+                title="Ekspor PDF Bulanan Siap Cetak"
+              >
+                <Download className="w-3 h-3 text-rose-400" />
+                <span>PDF</span>
+              </button>
               <button
                 onClick={() => handleExportSpecific('monthly', '2026-10', 'xlsx')}
-                className="py-1.5 px-2 rounded-lg bg-emerald-950 border border-emerald-800/80 text-emerald-300 hover:bg-emerald-900 text-[11px] font-semibold flex items-center justify-center gap-1"
+                className="py-1.5 px-1.5 rounded-lg bg-emerald-950 border border-emerald-800/80 text-emerald-300 hover:bg-emerald-900 text-[11px] font-semibold flex items-center justify-center gap-1"
               >
                 <Download className="w-3 h-3" />
                 <span>Excel</span>
               </button>
               <button
                 onClick={() => handleExportSpecific('monthly', '2026-10', 'csv')}
-                className="py-1.5 px-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 text-[11px] font-semibold flex items-center justify-center gap-1"
+                className="py-1.5 px-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 text-[11px] font-semibold flex items-center justify-center gap-1"
               >
                 <Download className="w-3 h-3 text-zinc-400" />
                 <span>CSV</span>
@@ -299,17 +354,25 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
             <p className="text-[11px] text-zinc-400 leading-tight">
               Evaluasi kinerja tahunan, laporan laba rugi, dan pertumbuhan ISP.
             </p>
-            <div className="grid grid-cols-2 gap-1.5 pt-1">
+            <div className="grid grid-cols-3 gap-1 pt-1">
+              <button
+                onClick={() => handleExportSpecific('yearly', '2026', 'pdf')}
+                className="py-1.5 px-1.5 rounded-lg bg-rose-950 border border-rose-800 text-rose-300 hover:bg-rose-900 text-[11px] font-semibold flex items-center justify-center gap-1"
+                title="Ekspor PDF Tahunan Siap Cetak"
+              >
+                <Download className="w-3 h-3 text-rose-400" />
+                <span>PDF</span>
+              </button>
               <button
                 onClick={() => handleExportSpecific('yearly', '2026', 'xlsx')}
-                className="py-1.5 px-2 rounded-lg bg-emerald-950 border border-emerald-800/80 text-emerald-300 hover:bg-emerald-900 text-[11px] font-semibold flex items-center justify-center gap-1"
+                className="py-1.5 px-1.5 rounded-lg bg-emerald-950 border border-emerald-800/80 text-emerald-300 hover:bg-emerald-900 text-[11px] font-semibold flex items-center justify-center gap-1"
               >
                 <Download className="w-3 h-3" />
                 <span>Excel</span>
               </button>
               <button
                 onClick={() => handleExportSpecific('yearly', '2026', 'csv')}
-                className="py-1.5 px-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 text-[11px] font-semibold flex items-center justify-center gap-1"
+                className="py-1.5 px-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 text-[11px] font-semibold flex items-center justify-center gap-1"
               >
                 <Download className="w-3 h-3 text-zinc-400" />
                 <span>CSV</span>
@@ -329,17 +392,25 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
             <p className="text-[11px] text-zinc-400 leading-tight">
               Export data tagihan lunas, belum bayar, dan piutang tertunggak.
             </p>
-            <div className="grid grid-cols-2 gap-1.5 pt-1">
+            <div className="grid grid-cols-3 gap-1 pt-1">
+              <button
+                onClick={handleExportBillsPdf}
+                className="py-1.5 px-1.5 rounded-lg bg-rose-950 border border-rose-800 text-rose-300 hover:bg-rose-900 text-[11px] font-semibold flex items-center justify-center gap-1"
+                title="Ekspor PDF Seluruh Tagihan Siap Cetak"
+              >
+                <Download className="w-3 h-3 text-rose-400" />
+                <span>PDF</span>
+              </button>
               <button
                 onClick={handleExportBillsExcel}
-                className="py-1.5 px-2 rounded-lg bg-emerald-950 border border-emerald-800/80 text-emerald-300 hover:bg-emerald-900 text-[11px] font-semibold flex items-center justify-center gap-1"
+                className="py-1.5 px-1.5 rounded-lg bg-emerald-950 border border-emerald-800/80 text-emerald-300 hover:bg-emerald-900 text-[11px] font-semibold flex items-center justify-center gap-1"
               >
                 <Download className="w-3 h-3" />
                 <span>Excel</span>
               </button>
               <button
                 onClick={handleExportBillsCsv}
-                className="py-1.5 px-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 text-[11px] font-semibold flex items-center justify-center gap-1"
+                className="py-1.5 px-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 text-[11px] font-semibold flex items-center justify-center gap-1"
               >
                 <Download className="w-3 h-3 text-zinc-400" />
                 <span>CSV</span>

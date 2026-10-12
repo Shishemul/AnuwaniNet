@@ -1,6 +1,8 @@
 import { Transaction, Bill, Voucher } from '../types';
 import { DataService } from './dataService';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export interface ReportSummary {
   periodLabel: string;
@@ -328,4 +330,338 @@ export class ReportService {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   }
+
+  // 5. Professional PDF Export for Transactions
+  static exportTransactionsToPdf(
+    transactions: Transaction[],
+    summary?: ReportSummary,
+    periodLabel: string = 'Semua Periode',
+    filename: string = 'Laporan_Transaksi_AnuwaniNet.pdf'
+  ) {
+    const doc = new jsPDF('l', 'mm', 'a4'); // Landscape A4: 297mm x 210mm
+    const appSettings = DataService.getAppSettings();
+    const currentDateStr = new Date().toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    // Brand Header Bar
+    doc.setFillColor(15, 23, 42); // slate-900
+    doc.rect(0, 0, 297, 24, 'F');
+
+    // Title
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${appSettings.companyName.toUpperCase()} - LAPORAN KEUANGAN TRANSAKSI`, 14, 11);
+
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(203, 213, 225); // slate-300
+    doc.text(`ISP & Billing Manager | NOC: ${appSettings.phoneCs} | ${appSettings.addressNoc}`, 14, 18);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(239, 68, 68); // red-500
+    doc.text(`PERIODE: ${periodLabel.toUpperCase()}`, 283, 11, { align: 'right' });
+    doc.setTextColor(148, 163, 184); // slate-400
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.text(`Dicetak pada: ${currentDateStr}`, 283, 18, { align: 'right' });
+
+    // Financial Recap Box
+    let startY = 28;
+    if (summary) {
+      doc.setFillColor(248, 250, 252); // slate-50
+      doc.setDrawColor(226, 232, 240); // slate-200
+      doc.roundedRect(14, startY, 269, 14, 2, 2, 'FD');
+
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 23, 42);
+
+      const colWidth = 269 / 5;
+      // 1. Total Pemasukan
+      doc.text('TOTAL PEMASUKAN:', 18, startY + 5.5);
+      doc.setTextColor(22, 101, 52); // green-800
+      doc.text(this.formatCurrency(summary.totalIncome), 18, startY + 10.5);
+
+      // 2. Total Pengeluaran
+      doc.setTextColor(15, 23, 42);
+      doc.text('TOTAL PENGELUARAN:', 18 + colWidth, startY + 5.5);
+      doc.setTextColor(153, 27, 27); // red-800
+      doc.text(this.formatCurrency(summary.totalExpense), 18 + colWidth, startY + 10.5);
+
+      // 3. Laba Bersih
+      doc.setTextColor(15, 23, 42);
+      doc.text('LABA BERSIH (NET):', 18 + colWidth * 2, startY + 5.5);
+      doc.setTextColor(summary.netProfit >= 0 ? 21 : 185, summary.netProfit >= 0 ? 128 : 28, summary.netProfit >= 0 ? 61 : 28);
+      doc.text(this.formatCurrency(summary.netProfit), 18 + colWidth * 2, startY + 10.5);
+
+      // 4. Tagihan Tertunggak
+      doc.setTextColor(15, 23, 42);
+      doc.text('TAGIHAN TERTUNGGAK:', 18 + colWidth * 3, startY + 5.5);
+      doc.setTextColor(180, 83, 9); // amber-700
+      doc.text(this.formatCurrency(summary.unpaidDues), 18 + colWidth * 3, startY + 10.5);
+
+      // 5. Total Transaksi
+      doc.setTextColor(15, 23, 42);
+      doc.text('JUMLAH TRANSAKSI:', 18 + colWidth * 4, startY + 5.5);
+      doc.setTextColor(30, 41, 59);
+      doc.text(`${transactions.length} Transaksi`, 18 + colWidth * 4, startY + 10.5);
+
+      startY += 18;
+    }
+
+    // Transactions Table
+    const tableHeaders = [
+      ['No', 'Tanggal', 'No. Transaksi', 'Pelanggan / Keterangan', 'Tipe', 'Kategori', 'Metode', 'Jumlah (IDR)', 'Status']
+    ];
+
+    const tableRows = transactions.map((t, idx) => [
+      String(idx + 1),
+      t.date || '-',
+      t.invoiceNumber || '-',
+      t.customerName || (t.notes ? t.notes.slice(0, 30) : '-'),
+      (t.type || '-').toUpperCase(),
+      t.category === 'income' ? 'PEMASUKAN' : 'PENGELUARAN',
+      (t.paymentMethod || '-').toUpperCase(),
+      this.formatCurrency(t.amount),
+      t.status === 'completed' ? 'SUKSES' : (t.status || '-').toUpperCase()
+    ]);
+
+    autoTable(doc, {
+      head: tableHeaders,
+      body: tableRows,
+      startY: startY,
+      theme: 'grid',
+      styles: {
+        fontSize: 7.5,
+        cellPadding: 2,
+        textColor: [30, 41, 59],
+        lineColor: [226, 232, 240],
+        lineWidth: 0.1
+      },
+      headStyles: {
+        fillColor: [30, 41, 59], // slate-800
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'center'
+      },
+      columnStyles: {
+        0: { cellWidth: 10, halign: 'center' },
+        1: { cellWidth: 26, halign: 'center' },
+        2: { cellWidth: 35, fontStyle: 'bold' },
+        3: { cellWidth: 65 },
+        4: { cellWidth: 25, halign: 'center' },
+        5: { cellWidth: 26, halign: 'center' },
+        6: { cellWidth: 24, halign: 'center' },
+        7: { cellWidth: 32, halign: 'right', fontStyle: 'bold' },
+        8: { cellWidth: 24, halign: 'center' }
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252]
+      },
+      didParseCell: (data) => {
+        // Color amount depending on category
+        if (data.section === 'body' && data.column.index === 7) {
+          const rowCat = (data.row.raw as any)?.[5];
+          if (rowCat === 'PEMASUKAN') {
+            data.cell.styles.textColor = [22, 101, 52];
+          } else {
+            data.cell.styles.textColor = [153, 27, 27];
+          }
+        }
+      },
+      didDrawPage: (data) => {
+        // Footer on each page
+        const pageCount = (doc as any).internal.getNumberOfPages();
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          `Dokumen resmi ${appSettings.companyName} | Halaman ${data.pageNumber} dari ${pageCount}`,
+          14,
+          204
+        );
+        doc.text('Valid & Terverifikasi Otomatis oleh Sistem Keuangan AnuwaniNet', 283, 204, { align: 'right' });
+      }
+    });
+
+    // Verification signatures block at end of table
+    const finalY = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 8 : 160;
+    if (finalY < 185) {
+      doc.setFontSize(7.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text('Dibuat & Divalidasi Oleh:', 35, finalY);
+      doc.text('Mengetahui (Pimpinan / Superadmin):', 215, finalY);
+
+      doc.setFont('helvetica', 'bold');
+      doc.text('( Bagian Keuangan / Kasir )', 35, finalY + 14);
+      doc.text(`( ${appSettings.appName} Management )`, 215, finalY + 14);
+    }
+
+    doc.save(filename);
+  }
+
+  // 6. Professional PDF Export for Bills
+  static exportBillsToPdf(
+    bills: Bill[],
+    periodLabel: string = 'Semua Periode',
+    filename: string = 'Laporan_Tagihan_AnuwaniNet.pdf'
+  ) {
+    const doc = new jsPDF('l', 'mm', 'a4'); // Landscape A4
+    const appSettings = DataService.getAppSettings();
+    const currentDateStr = new Date().toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    // Header Bar
+    doc.setFillColor(185, 28, 28); // red-700
+    doc.rect(0, 0, 297, 24, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${appSettings.companyName.toUpperCase()} - REKAPITULASI TAGIHAN PELANGGAN`, 14, 11);
+
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(254, 226, 226); // red-100
+    doc.text(`ISP & Billing Manager | Rekening BCA: ${appSettings.bcaAccount} | BRI: ${appSettings.briAccount}`, 14, 18);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(255, 255, 255);
+    doc.text(`PERIODE: ${periodLabel.toUpperCase()}`, 283, 11, { align: 'right' });
+    doc.setTextColor(254, 202, 202);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.text(`Dicetak pada: ${currentDateStr}`, 283, 18, { align: 'right' });
+
+    // Summary Metric Ribbon
+    const paidBills = bills.filter(b => b.status === 'paid');
+    const unpaidBills = bills.filter(b => b.status === 'unpaid');
+    const overdueBills = bills.filter(b => b.status === 'overdue');
+    const totalAmount = bills.reduce((s, b) => s + b.amount, 0);
+    const paidAmount = paidBills.reduce((s, b) => s + b.amount, 0);
+    const unpaidAmount = [...unpaidBills, ...overdueBills].reduce((s, b) => s + b.amount, 0);
+
+    const startY = 28;
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(14, startY, 269, 14, 2, 2, 'FD');
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+
+    const colWidth = 269 / 4;
+    doc.text('TOTAL TAGIHAN:', 18, startY + 5.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`${this.formatCurrency(totalAmount)} (${bills.length} Lembar)`, 18, startY + 10.5);
+
+    doc.setTextColor(15, 23, 42);
+    doc.text('TAGIHAN LUNAS:', 18 + colWidth, startY + 5.5);
+    doc.setTextColor(22, 101, 52); // green-800
+    doc.text(`${this.formatCurrency(paidAmount)} (${paidBills.length} Lembar)`, 18 + colWidth, startY + 10.5);
+
+    doc.setTextColor(15, 23, 42);
+    doc.text('BELUM LUNAS / TERTUNGGAK:', 18 + colWidth * 2, startY + 5.5);
+    doc.setTextColor(185, 28, 28); // red-700
+    doc.text(`${this.formatCurrency(unpaidAmount)} (${unpaidBills.length + overdueBills.length} Lembar)`, 18 + colWidth * 2, startY + 10.5);
+
+    doc.setTextColor(15, 23, 42);
+    doc.text('PERSENTASE PELUNASAN:', 18 + colWidth * 3, startY + 5.5);
+    const percent = bills.length > 0 ? Math.round((paidBills.length / bills.length) * 100) : 0;
+    doc.setTextColor(percent >= 70 ? 22 : 180, percent >= 70 ? 101 : 83, percent >= 70 ? 52 : 9);
+    doc.text(`${percent}% Terbayar`, 18 + colWidth * 3, startY + 10.5);
+
+    // Table
+    const tableHeaders = [
+      ['No', 'No. Invoice', 'Nama Pelanggan', 'No. HP', 'Paket Internet', 'Periode', 'Jatuh Tempo', 'Jumlah (IDR)', 'Status', 'Tgl Bayar / Metode']
+    ];
+
+    const tableRows = bills.map((b, idx) => [
+      String(idx + 1),
+      b.billNumber,
+      b.customerName,
+      b.customerPhone,
+      b.packageName,
+      b.period,
+      b.dueDate,
+      this.formatCurrency(b.amount),
+      b.status === 'paid' ? 'LUNAS' : b.status === 'overdue' ? 'TERTUNGGAK' : 'BELUM BAYAR',
+      b.paidAt ? `${b.paidAt} (${(b.paymentMethod || 'CASH').toUpperCase()})` : '-'
+    ]);
+
+    autoTable(doc, {
+      head: tableHeaders,
+      body: tableRows,
+      startY: startY + 18,
+      theme: 'grid',
+      styles: {
+        fontSize: 7.5,
+        cellPadding: 2,
+        textColor: [30, 41, 59],
+        lineColor: [226, 232, 240],
+        lineWidth: 0.1
+      },
+      headStyles: {
+        fillColor: [185, 28, 28], // red-700
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'center'
+      },
+      columnStyles: {
+        0: { cellWidth: 10, halign: 'center' },
+        1: { cellWidth: 34, fontStyle: 'bold' },
+        2: { cellWidth: 42 },
+        3: { cellWidth: 28, halign: 'center' },
+        4: { cellWidth: 38 },
+        5: { cellWidth: 24, halign: 'center' },
+        6: { cellWidth: 24, halign: 'center' },
+        7: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },
+        8: { cellWidth: 22, halign: 'center', fontStyle: 'bold' },
+        9: { cellWidth: 32, halign: 'center' }
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252]
+      },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index === 8) {
+          const statusVal = data.cell.raw;
+          if (statusVal === 'LUNAS') {
+            data.cell.styles.textColor = [22, 101, 52];
+          } else if (statusVal === 'TERTUNGGAK') {
+            data.cell.styles.textColor = [185, 28, 28];
+          } else {
+            data.cell.styles.textColor = [180, 83, 9];
+          }
+        }
+      },
+      didDrawPage: (data) => {
+        const pageCount = (doc as any).internal.getNumberOfPages();
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          `Rekapitulasi Tagihan ${appSettings.companyName} | Halaman ${data.pageNumber} dari ${pageCount}`,
+          14,
+          204
+        );
+        doc.text('AnuwaniNet ISP Billing & Ruijie Management System', 283, 204, { align: 'right' });
+      }
+    });
+
+    doc.save(filename);
+  }
 }
+

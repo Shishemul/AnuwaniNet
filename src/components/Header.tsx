@@ -1,14 +1,14 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Shield, UserCheck, Database, LogIn, LogOut, ChevronDown, Moon, Sun, User as UserIcon, Settings } from 'lucide-react';
+import { Shield, Database, LogIn, LogOut, Moon, Sun } from 'lucide-react';
 import { UserRole, ThemePreference } from '../types';
 
 interface HeaderProps {
   onOpenAuth: () => void;
   onOpenSupabase: () => void;
   onOpenProfileSettings?: () => void;
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
+  activeTab?: string;
+  setActiveTab?: (tab: string) => void;
   isSupabaseConnected: boolean;
 }
 
@@ -16,12 +16,10 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAuth,
   onOpenSupabase,
   onOpenProfileSettings,
-  activeTab,
   setActiveTab,
   isSupabaseConnected
 }) => {
-  const { currentUser, logout, switchRole, updateThemePreference } = useAuth();
-  const [showRoleMenu, setShowRoleMenu] = React.useState(false);
+  const { currentUser, logout, updateThemePreference } = useAuth();
 
   const currentTheme: ThemePreference = currentUser?.themePreference || 'midnight';
 
@@ -47,8 +45,8 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Zone 1: Brand title wordmark */}
         <div className="flex items-center gap-3 shrink-0">
           <button
-            onClick={() => setActiveTab('dashboard')}
-            className="flex items-center gap-2.5 text-left focus:outline-none"
+            onClick={() => setActiveTab?.('dashboard')}
+            className="flex items-center gap-2.5 text-left focus:outline-none cursor-pointer"
           >
             <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center font-black text-white text-base shadow-sm shadow-red-900/50">
               A
@@ -64,69 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        {/* Zone 2: Navigation Links */}
-        <nav className="hidden lg:flex items-center gap-6 text-sm font-medium text-zinc-400">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`whitespace-nowrap transition-colors hover:text-white ${
-              activeTab === 'dashboard' ? 'text-white font-semibold' : ''
-            }`}
-          >
-            Ringkasan
-          </button>
-          <button
-            onClick={() => setActiveTab('pelanggan')}
-            className={`whitespace-nowrap transition-colors hover:text-white ${
-              activeTab === 'pelanggan' ? 'text-white font-semibold' : ''
-            }`}
-          >
-            Pelanggan
-          </button>
-          <button
-            onClick={() => setActiveTab('tagihan')}
-            className={`whitespace-nowrap transition-colors hover:text-white ${
-              activeTab === 'tagihan' ? 'text-white font-semibold' : ''
-            }`}
-          >
-            Tagihan
-          </button>
-          <button
-            onClick={() => setActiveTab('ruijie')}
-            className={`whitespace-nowrap transition-colors hover:text-white ${
-              activeTab === 'ruijie' ? 'text-white font-semibold' : ''
-            }`}
-          >
-            Ruijie & Isolir
-          </button>
-          <button
-            onClick={() => setActiveTab('voucher_wa')}
-            className={`whitespace-nowrap transition-colors hover:text-white ${
-              activeTab === 'voucher_wa' ? 'text-white font-semibold' : ''
-            }`}
-          >
-            Voucher & WA Bot
-          </button>
-          <button
-            onClick={() => setActiveTab('laporan')}
-            className={`whitespace-nowrap transition-colors hover:text-white ${
-              activeTab === 'laporan' ? 'text-white font-semibold' : ''
-            }`}
-          >
-            Laporan
-          </button>
-          {currentUser?.role === 'superadmin' && (
-            <button
-              onClick={() => setActiveTab('users')}
-              className={`whitespace-nowrap transition-colors hover:text-white ${
-                activeTab === 'users' ? 'text-white font-semibold' : ''
-              }`}
-            >
-              Manajemen User
-            </button>
-          )}
-        </nav>
-
-        {/* Zone 3: Primary Action / User Profile & Supabase */}
+        {/* Zone 2: Primary Action / User Profile & Supabase */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
           {/* Quick Theme Preference Toggle Button */}
           <button
