@@ -140,6 +140,10 @@ function MainApp() {
   const unpaidCount = bills.filter(b => b.status === 'unpaid' || b.status === 'overdue').length;
   const isolatedCount = customers.filter(c => c.status === 'isolated').length;
 
+  if (!currentUser) {
+    return <LoginView />;
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-red-600 selection:text-white">
       {/* 3-Zone Header */}
@@ -204,6 +208,7 @@ function MainApp() {
             <RuijieView
               devices={devices}
               customers={customers}
+              packages={packages}
               onRefreshData={refreshAllData}
             />
           )}
@@ -241,6 +246,7 @@ function MainApp() {
             <CustomerPortalView
               customers={customers}
               bills={bills}
+              transactions={transactions}
               onOpenRecordPayment={handleOpenRecordPayment}
               onPrintBill={handleOpenPrintBill}
               onNavigateToWaBot={() => setActiveTab('voucher_wa')}

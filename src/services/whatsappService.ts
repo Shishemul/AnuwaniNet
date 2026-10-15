@@ -97,6 +97,89 @@ export class WhatsAppService {
       `Terima kasih telah menggunakan layanan AnuwaniNet!`;
   }
 
+  // 1b. Template Peringatan Mendesak (Urgent Payment Reminder) dengan Warning Badge & Isolir Threat
+  static generateUrgentPaymentMessage(bill: Bill, customer: Customer, daysOverdue?: number): string {
+    const danaLink = `https://link.dana.id/pay?order=${bill.billNumber}&amount=${bill.amount}`;
+    const overdueLabel = daysOverdue && daysOverdue > 0 
+      ? `TERLAMBAT ${daysOverdue} HARI` 
+      : 'MELEWATI BATAS JATUH TEMPO';
+
+    return `🚨 *PERINGATAN PEMBAYARAN MENDESAK (URGENT PAYMENT)* 🚨\n` +
+      `*JARINGAN INTERNET ANUWANINET*\n` +
+      `--------------------------------------------------\n` +
+      `Yth. Pelanggan: *${customer.name}*\n` +
+      `ID Pelanggan: *${customer.customerCode}*\n` +
+      `No. Tagihan: *${bill.billNumber}*\n` +
+      `Periode: *${bill.period}*\n` +
+      `Paket Layanan: *${customer.packageName}*\n` +
+      `Batas Jatuh Tempo: *${bill.dueDate}*\n` +
+      `Status Tagihan: *⚠️ OVERDUE (${overdueLabel})*\n` +
+      `TOTAL TUNGGAKAN: *${this.formatRupiah(bill.amount)}*\n` +
+      `--------------------------------------------------\n` +
+      `⚠️ *PEMBERITAHUAN ISOLIR OTOMATIS RUIJIE:*\n` +
+      `Tagihan internet Anda telah melewati batas waktu pembayaran. Sistem router Ruijie Reyee akan *MENGISOLIR (MEMUTUS SEMENTARA)* akses internet Anda jika pelunasan belum diselesaikan hari ini.\n\n` +
+      `💳 *PEMBAYARAN INSTAN (AUTO-AKTIF / BUKA ISOLIR CEPAT):*\n` +
+      `🔹 *DANA E-Wallet & QRIS Instan*:\n` +
+      `👉 ${danaLink}\n` +
+      `*(Verifikasi otomatis 24 jam, langsung memulihkan koneksi Wi-Fi Anda)*\n\n` +
+      `🔹 *Transfer Bank Resmi AnuwaniNet*:\n` +
+      `• BCA: 8291-039-112 a/n AnuwaniNet\n` +
+      `• BRI: 0021-01-082910-50-1 a/n AnuwaniNet\n\n` +
+      `Setelah transfer, Anda dapat konfirmasi via bot dengan membalas: *BAYAR ${bill.billNumber}*\n\n` +
+      `_Abaikan pemberitahuan ini jika Anda telah menyelesaikan pembayaran dalam 1 jam terakhir. Terima kasih atas kerja samanya._`;
+  }
+
+  // Kirim Pesan Urgent Payment langsung via WhatsApp
+  static sendUrgentPaymentMessage(bill: Bill, customer: Customer, daysOverdue?: number) {
+    const msg = this.generateUrgentPaymentMessage(bill, customer, daysOverdue);
+    this.sendAutomatedNotification(customer.phone, customer.name, 'tagihan', msg);
+
+    // Update bill status locally
+    const allBills = DataService.getBills();
+    const target = allBills.find(b => b.id === bill.id);
+    if (target) {
+      target.whatsappReminderSent = true;
+      DataService.saveBills(allBills);
+    }
+
+    this.openWhatsAppUrl(customer.phone, msg);
+  }
+
+  // Auto-Blast Urgent Payment ke semua pelanggan berstatus Overdue
+  static runBulkUrgentPaymentReminders(overdueList: { bill: Bill; customer: Customer; daysOverdue: number }[]): {
+    sentCount: number;
+    names: string[];
+    message: string;
+  } {
+    let sentCount = 0;
+    const names: string[] = [];
+    const allBills = DataService.getBills();
+
+    overdueList.forEach(({ bill, customer, daysOverdue }) => {
+      const msg = this.generateUrgentPaymentMessage(bill, customer, daysOverdue);
+      this.sendAutomatedNotification(customer.phone, customer.name, 'tagihan', msg);
+
+      const b = allBills.find(item => item.id === bill.id);
+      if (b) {
+        b.whatsappReminderSent = true;
+      }
+      sentCount++;
+      names.push(customer.name);
+    });
+
+    if (sentCount > 0) {
+      DataService.saveBills(allBills);
+    }
+
+    return {
+      sentCount,
+      names,
+      message: sentCount > 0
+        ? `Sistem otomatis berhasil mengirimkan ${sentCount} pesan 'Urgent Payment' WhatsApp ke pelanggan overdue!`
+        : 'Tidak ada tagihan overdue yang perlu dikirimkan saat ini.'
+    };
+  }
+
   // 2. Template Kuitansi / Bukti Pembayaran
   static generateReceiptMessage(bill: Bill, customerName: string): string {
     return `*KUITANSI PEMBAYARAN ANUWANINET*\n` +

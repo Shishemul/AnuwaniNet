@@ -27,7 +27,13 @@ import {
   FileText,
   Calendar,
   Layers,
-  ChevronRight
+  ChevronRight,
+  AlertOctagon,
+  Flame,
+  Copy,
+  Check,
+  Eye,
+  X
 } from 'lucide-react';
 import {
   AreaChart,
@@ -47,6 +53,7 @@ import { RuijieService } from '../services/ruijieService';
 import { WhatsAppService } from '../services/whatsappService';
 import { DanaService } from '../services/danaService';
 import { WhatsAppTemplateModal } from '../components/modals/WhatsAppTemplateModal';
+import { MonthlyRevenueSummaryChart } from '../components/dashboard/MonthlyRevenueSummaryChart';
 
 interface DashboardViewProps {
   customers: Customer[];
@@ -82,6 +89,67 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [chartViewMode, setChartViewMode] = useState<'combined' | 'revenue' | 'customers'>('combined');
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showDueBillsList, setShowDueBillsList] = useState(true);
+  const [showOverduePanel, setShowOverduePanel] = useState(true);
+  const [previewUrgentItem, setPreviewUrgentItem] = useState<{ bill: Bill; customer: Customer; daysOverdue: number } | null>(null);
+  const [copiedUrgentMsg, setCopiedUrgentMsg] = useState(false);
+  const [urgentActionStatus, setUrgentActionStatus] = useState<string | null>(null);
+
+  // Automated Overdue Detection & Analysis (Notification System)
+  const overdueCustomersData = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return bills
+      .filter(b => {
+        if (b.status === 'overdue') return true;
+        if (b.status === 'unpaid' && b.dueDate) {
+          const dueDate = new Date(b.dueDate);
+          dueDate.setHours(0, 0, 0, 0);
+          return dueDate.getTime() < today.getTime();
+        }
+        return false;
+      })
+      .map(bill => {
+        const customer = customers.find(c => c.id === bill.customerId) || {
+          id: bill.customerId,
+          customerCode: 'ANW-PEL',
+          name: bill.customerName,
+          phone: bill.customerPhone,
+          packageName: bill.packageName,
+          packagePrice: bill.amount,
+          status: 'isolated' as const,
+          address: 'Alamat Pelanggan',
+          ipAddress: '192.168.10.x',
+          macAddress: '-',
+          billingDay: 20,
+          autoIsolirEnabled: true,
+          joinDate: '-',
+          ruijieDeviceId: 'dev-1',
+          pppoeUsername: '',
+          pppoePassword: '',
+          packageId: bill.packageId
+        };
+
+        let daysOverdue = 1;
+        if (bill.dueDate) {
+          const dueDate = new Date(bill.dueDate);
+          dueDate.setHours(0, 0, 0, 0);
+          const diffTime = today.getTime() - dueDate.getTime();
+          daysOverdue = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+        }
+
+        return {
+          bill,
+          customer,
+          daysOverdue
+        };
+      })
+      .sort((a, b) => b.daysOverdue - a.daysOverdue);
+  }, [bills, customers]);
+
+  const totalOverdueAmount = useMemo(() => {
+    return overdueCustomersData.reduce((sum, item) => sum + item.bill.amount, 0);
+  }, [overdueCustomersData]);
 
   // 1. Tagihan Jatuh Tempo dalam 3 Hari ke Depan (Notification System)
   const upcomingDueBills = useMemo(() => {
@@ -261,7 +329,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     setReminderStatus(res.message);
     onRefreshData();
     setTimeout(() => setReminderStatus(null), 6000);
-    alert(res.message);
+  };
+
+  const handleSendSingleUrgent = (bill: Bill, customer: Customer, daysOverdue: number) => {
+    WhatsAppService.sendUrgentPaymentMessage(bill, customer, daysOverdue);
+    setUrgentActionStatus(`⚡ Pesan 'Urgent Payment' WhatsApp berhasil dikirim ke ${customer.name} (${customer.phone}) untuk tagihan ${bill.billNumber}!`);
+    onRefreshData();
+    setTimeout(() => setUrgentActionStatus(null), 8000);
+  };
+
+  const handleSendAllUrgent = () => {
+    if (overdueCustomersData.length === 0) return;
+    const res = WhatsAppService.runBulkUrgentPaymentReminders(overdueCustomersData);
+    setUrgentActionStatus(res.message);
+    onRefreshData();
+    setTimeout(() => setUrgentActionStatus(null), 8000);
   };
 
   // Filtered transactions
@@ -357,6 +439,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="p-3.5 rounded-lg bg-emerald-950/40 border border-emerald-800/80 text-xs text-emerald-200 flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{reminderStatus}</span>
+        </div>
+      )}
+
+      {urgentActionStatus && (
+        <div className="p-3.5 rounded-xl bg-gradient-to-r from-red-950 via-rose-950/80 to-zinc-900 border border-red-600/70 text-xs text-red-100 flex items-center justify-between gap-3 shadow-lg shadow-red-950/40">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-red-600/30 text-red-400 border border-red-500/50">
+              <Zap className="w-4 h-4 text-yellow-300 fill-yellow-300 animate-bounce" />
+            </div>
+            <span className="font-semibold">{urgentActionStatus}</span>
+          </div>
+          <button
+            onClick={() => setUrgentActionStatus(null)}
+            className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -456,6 +555,177 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
+      {/* NOTIFIKASI OTOMATIS: Pelanggan Menunggak (Overdue) dengan Warning Badge & Quick-Action 'Urgent Payment' WA */}
+      {overdueCustomersData.length > 0 && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-red-950/90 via-zinc-900 to-zinc-950 border-2 border-red-600/70 space-y-4 shadow-xl shadow-red-950/50 relative overflow-hidden">
+          {/* Ambient warning background glow */}
+          <div className="absolute top-0 right-0 w-96 h-96 bg-red-600/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+
+          {/* Alert Header */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="p-3 rounded-xl bg-red-600/20 text-red-400 border border-red-500/50 shadow-inner shadow-red-950 shrink-0">
+                <AlertOctagon className="w-6 h-6 animate-pulse text-red-500" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-600 text-white shadow-sm flex items-center gap-1 animate-pulse">
+                    <Flame className="w-3 h-3 fill-white" />
+                    NOTIFIKASI OTOMATIS OVERDUE
+                  </span>
+                  <h3 className="text-base sm:text-lg font-extrabold text-white tracking-tight">
+                    {overdueCustomersData.length} Pelanggan Melewati Jatuh Tempo
+                  </h3>
+                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold bg-red-950 text-red-300 border border-red-800">
+                    Total Tunggakan: {WhatsAppService.formatRupiah(totalOverdueAmount)}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-300 max-w-3xl">
+                  Sistem otomatis mendeteksi tagihan pelanggan yang telah melewati batas tanggal pembayaran. Pelanggan berikut berisiko tinggi pemutusan koneksi (Auto-Isolir Ruijie Gateway). Gunakan tombol quick-action di bawah untuk mengirimkan pesan peringatan 'Urgent Payment' WhatsApp.
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Action Buttons in Alert Header */}
+            <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto shrink-0">
+              <button
+                onClick={handleSendAllUrgent}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold shadow-lg shadow-red-950/80 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                title="Kirim pesan peringatan keras 'Urgent Payment' WhatsApp ke semua nomor pelanggan overdue sekaligus"
+              >
+                <Zap className="w-4 h-4 text-yellow-300 fill-yellow-300" />
+                <span>Kirim 'Urgent Payment' WA ke Semua ({overdueCustomersData.length})</span>
+              </button>
+
+              <button
+                onClick={handleRunAutoIsolir}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 border border-red-900/80 text-red-400 hover:bg-red-950/60 text-xs font-semibold transition-colors"
+                title="Jalankan sinkronisasi auto-isolir Ruijie Gateway"
+              >
+                <ShieldAlert className="w-4 h-4 text-red-500" />
+                <span>Isolir Ruijie</span>
+              </button>
+
+              <button
+                onClick={() => setShowOverduePanel(!showOverduePanel)}
+                className="px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white text-xs font-medium transition-colors"
+              >
+                {showOverduePanel ? 'Sembunyikan' : `Buka Rincian (${overdueCustomersData.length})`}
+              </button>
+            </div>
+          </div>
+
+          {/* Overdue Customer Cards List */}
+          {showOverduePanel && (
+            <div className="pt-3 border-t border-red-900/40 relative z-10 space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {overdueCustomersData.map(({ bill, customer, daysOverdue }) => {
+                  const isIsolated = customer.status === 'isolated';
+
+                  return (
+                    <div
+                      key={bill.id}
+                      className="p-4 rounded-xl bg-zinc-950/85 border border-red-700/60 hover:border-red-500 transition-all space-y-3 shadow-md group relative"
+                    >
+                      {/* Top Badges */}
+                      <div className="flex items-center justify-between gap-2">
+                        {/* Warning Badge */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-600/30 text-red-300 border border-red-500/80 animate-pulse shadow-sm">
+                            <AlertTriangle className="w-3 h-3 text-red-400" />
+                            OVERDUE • TERLAMBAT {daysOverdue} HARI
+                          </span>
+                          {isIsolated ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-950 text-red-400 border border-red-900">
+                              <ShieldAlert className="w-3 h-3" />
+                              TERISOLIR RUIJIE
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-950 text-amber-300 border border-amber-900">
+                              RISIKO ISOLIR
+                            </span>
+                          )}
+                        </div>
+
+                        <span className="text-[11px] font-mono text-zinc-400 font-semibold">
+                          {customer.customerCode}
+                        </span>
+                      </div>
+
+                      {/* Customer & Bill Core Details */}
+                      <div>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <h4 className="text-sm font-bold text-white truncate group-hover:text-red-400 transition-colors">
+                            {customer.name}
+                          </h4>
+                          <span className="text-sm font-black font-mono text-red-400 tabular-nums">
+                            {WhatsAppService.formatRupiah(bill.amount)}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-zinc-400 mt-0.5 flex flex-wrap items-center gap-2">
+                          <span>{customer.packageName}</span>
+                          <span>•</span>
+                          <span className="text-zinc-500">Invoice: {bill.billNumber}</span>
+                        </div>
+                        <div className="text-[11px] text-zinc-400 mt-1 flex items-center justify-between">
+                          <span>Batas Tempo: <strong className="text-zinc-300">{bill.dueDate}</strong></span>
+                          <span className="font-mono text-zinc-500">{customer.phone}</span>
+                        </div>
+                      </div>
+
+                      {/* Quick-Action Buttons */}
+                      <div className="pt-2 border-t border-zinc-900 flex items-center gap-2">
+                        {/* Primary Quick-Action Button: Send Urgent Payment WhatsApp */}
+                        <button
+                          onClick={() => handleSendSingleUrgent(bill, customer, daysOverdue)}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs shadow-md shadow-red-950/60 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                          title="Buka WhatsApp & kirim pesan peringatan Urgent Payment resmi"
+                        >
+                          <Zap className="w-3.5 h-3.5 text-yellow-300 fill-yellow-300" />
+                          <span>Kirim 'Urgent Payment' WA</span>
+                        </button>
+
+                        {/* Preview draft */}
+                        <button
+                          onClick={() => setPreviewUrgentItem({ bill, customer, daysOverdue })}
+                          className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                          title="Preview draft pesan & salin teks"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Pay Now Button */}
+                        {onOpenRecordPayment && (
+                          <button
+                            onClick={() => onOpenRecordPayment(bill)}
+                            className="px-2.5 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
+                            title="Catat pelunasan tagihan ini"
+                          >
+                            Bayar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {overdueCustomersData.length > 3 && (
+                <div className="text-right pt-1">
+                  <button
+                    onClick={() => onNavigate('tagihan')}
+                    className="text-xs text-red-400 hover:text-red-300 font-semibold inline-flex items-center gap-1"
+                  >
+                    <span>Kelola seluruh tagihan overdue di menu Tagihan</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Notifikasi Otomatis: Tagihan Jatuh Tempo dalam 3 Hari ke Depan */}
       {upcomingDueBills.length > 0 && (
         <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-950/40 via-zinc-900 to-zinc-900 border border-amber-800/60 space-y-3">
@@ -500,62 +770,86 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {showDueBillsList && (
             <div className="pt-2 border-t border-zinc-800/80">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                {upcomingDueBills.slice(0, 6).map(({ bill, diffDays, urgency, label }) => (
-                  <div
-                    key={bill.id}
-                    className="p-3 rounded-xl bg-zinc-950/70 border border-zinc-800 flex items-center justify-between text-xs hover:border-zinc-700 transition-colors"
-                  >
-                    <div className="min-w-0 pr-2 space-y-0.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-white truncate">{bill.customerName}</span>
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[9px] font-semibold whitespace-nowrap ${
-                            urgency === 'overdue'
-                              ? 'bg-red-950 text-red-400 border border-red-900'
-                              : urgency === 'today'
-                              ? 'bg-amber-950 text-amber-400 border border-amber-900'
-                              : 'bg-zinc-800 text-zinc-300'
-                          }`}
-                        >
-                          {label}
-                        </span>
+                {upcomingDueBills.slice(0, 6).map(({ bill, diffDays, urgency, label }) => {
+                  const isOverdue = urgency === 'overdue';
+                  const cust = customers.find(c => c.id === bill.customerId);
+
+                  return (
+                    <div
+                      key={bill.id}
+                      className={`p-3 rounded-xl border flex items-center justify-between text-xs transition-colors ${
+                        isOverdue
+                          ? 'bg-red-950/20 border-red-700/60 hover:border-red-500'
+                          : 'bg-zinc-950/70 border-zinc-800 hover:border-zinc-700'
+                      }`}
+                    >
+                      <div className="min-w-0 pr-2 space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-white truncate">{bill.customerName}</span>
+                          {isOverdue ? (
+                            <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-red-600/30 text-red-300 border border-red-500/80 animate-pulse flex items-center gap-1">
+                              <AlertOctagon className="w-2.5 h-2.5 text-red-400" />
+                              OVERDUE • {label}
+                            </span>
+                          ) : (
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-semibold whitespace-nowrap ${
+                                urgency === 'today'
+                                  ? 'bg-amber-950 text-amber-400 border border-amber-900'
+                                  : 'bg-zinc-800 text-zinc-300'
+                              }`}
+                            >
+                              {label}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-zinc-400 flex items-center gap-1.5">
+                          <span>{bill.packageName}</span>
+                          <span>•</span>
+                          <span className="font-mono text-emerald-400 font-bold">
+                            {WhatsAppService.formatRupiah(bill.amount)}
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-[11px] text-zinc-400 flex items-center gap-1.5">
-                        <span>{bill.packageName}</span>
-                        <span>•</span>
-                        <span className="font-mono text-emerald-400 font-bold">
-                          {WhatsAppService.formatRupiah(bill.amount)}
-                        </span>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isOverdue && cust ? (
+                          <button
+                            onClick={() => handleSendSingleUrgent(bill, cust, Math.abs(diffDays))}
+                            title="Kirim Pesan 'Urgent Payment' WhatsApp"
+                            className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-rose-500 text-white shadow-md shadow-red-950 transition-all hover:scale-105"
+                          >
+                            <Zap className="w-3 h-3 text-yellow-300 fill-yellow-300" />
+                            <span>Urgent WA</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              if (cust) {
+                                const msg = WhatsAppService.generateBillingMessage(bill, cust);
+                                WhatsAppService.openWhatsAppUrl(cust.phone, msg);
+                              }
+                            }}
+                            title="Kirim Pengingat WhatsApp"
+                            className="p-1.5 rounded-lg bg-emerald-950/80 text-emerald-400 border border-emerald-900/60 hover:bg-emerald-900 transition-colors"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
+                        {onOpenRecordPayment && (
+                          <button
+                            onClick={() => onOpenRecordPayment(bill)}
+                            title="Bayar Sekarang"
+                            className="px-2 py-1 text-[11px] font-semibold rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors"
+                          >
+                            Bayar
+                          </button>
+                        )}
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => {
-                          const cust = customers.find(c => c.id === bill.customerId);
-                          if (cust) {
-                            const msg = WhatsAppService.generateBillingMessage(bill, cust);
-                            WhatsAppService.openWhatsAppUrl(cust.phone, msg);
-                          }
-                        }}
-                        title="Kirim Pengingat WhatsApp"
-                        className="p-1.5 rounded-lg bg-emerald-950/80 text-emerald-400 border border-emerald-900/60 hover:bg-emerald-900 transition-colors"
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                      </button>
-
-                      {onOpenRecordPayment && (
-                        <button
-                          onClick={() => onOpenRecordPayment(bill)}
-                          title="Bayar Sekarang"
-                          className="px-2 py-1 text-[11px] font-semibold rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors"
-                        >
-                          Bayar
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {upcomingDueBills.length > 6 && (
@@ -784,217 +1078,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* Recharts Analytics: Monthly Revenue Trends & Customer Growth */}
-      <div className="p-5 sm:p-6 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-red-950/80 text-red-400 border border-red-900/40">
-                <BarChart3 className="w-5 h-5 text-red-500" />
-              </div>
-              <h3 className="text-base font-bold text-white">
-                Analisis Kinerja Bisnis: Tren Pendapatan & Pertumbuhan Pelanggan
-              </h3>
-            </div>
-            <p className="text-xs text-zinc-400 mt-1">
-              Visualisasi performa finansial 6 bulan terakhir dan penambahan pelanggan aktif secara real-time.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-1.5 p-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs self-start sm:self-auto">
-            <button
-              onClick={() => setChartViewMode('combined')}
-              className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                chartViewMode === 'combined'
-                  ? 'bg-red-600 text-white shadow-sm shadow-red-950'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
-              }`}
-            >
-              Semua Metrik
-            </button>
-            <button
-              onClick={() => setChartViewMode('revenue')}
-              className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                chartViewMode === 'revenue'
-                  ? 'bg-red-600 text-white shadow-sm shadow-red-950'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
-              }`}
-            >
-              Tren Finansial
-            </button>
-            <button
-              onClick={() => setChartViewMode('customers')}
-              className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                chartViewMode === 'customers'
-                  ? 'bg-red-600 text-white shadow-sm shadow-red-950'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
-              }`}
-            >
-              Pertumbuhan Pelanggan
-            </button>
-          </div>
-        </div>
-
-        {/* Chart View Area */}
-        <div className="h-72 w-full pt-2">
-          <ResponsiveContainer width="100%" height="100%">
-            {chartViewMode === 'customers' ? (
-              <LineChart data={monthlyPerformanceData} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                <XAxis dataKey="month" stroke="#71717a" fontSize={11} tickLine={false} />
-                <YAxis stroke="#71717a" fontSize={11} tickLine={false} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#09090b',
-                    borderColor: '#27272a',
-                    borderRadius: '0.75rem',
-                    fontSize: '12px',
-                    color: '#fff'
-                  }}
-                  formatter={(val: any) => [`${val} Pelanggan Aktif`, 'Pelanggan']}
-                />
-                <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                <Line
-                  type="monotone"
-                  dataKey="customers"
-                  name="Jumlah Pelanggan Aktif"
-                  stroke="#38bdf8"
-                  strokeWidth={3}
-                  dot={{ r: 5, fill: '#38bdf8', strokeWidth: 2, stroke: '#0284c7' }}
-                  activeDot={{ r: 7 }}
-                />
-              </LineChart>
-            ) : chartViewMode === 'revenue' ? (
-              <AreaChart data={monthlyPerformanceData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.6} />
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0.0} />
-                  </linearGradient>
-                  <linearGradient id="colorNet" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.5} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                <XAxis dataKey="month" stroke="#71717a" fontSize={11} tickLine={false} />
-                <YAxis
-                  stroke="#71717a"
-                  fontSize={11}
-                  tickLine={false}
-                  tickFormatter={(val) => `Rp ${(val / 1000000).toFixed(1)}Jt`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#09090b',
-                    borderColor: '#27272a',
-                    borderRadius: '0.75rem',
-                    fontSize: '12px',
-                    color: '#fff'
-                  }}
-                  formatter={(val: any) => [WhatsAppService.formatRupiah(Number(val)), '']}
-                />
-                <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                <Area
-                  type="monotone"
-                  dataKey="revenue"
-                  name="Total Pemasukan (Omset)"
-                  stroke="#ef4444"
-                  strokeWidth={2}
-                  fillOpacity={1}
-                  fill="url(#colorRev)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="netProfit"
-                  name="Laba Bersih Kas"
-                  stroke="#10b981"
-                  strokeWidth={2}
-                  fillOpacity={1}
-                  fill="url(#colorNet)"
-                />
-              </AreaChart>
-            ) : (
-              <BarChart data={monthlyPerformanceData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                <XAxis dataKey="month" stroke="#71717a" fontSize={11} tickLine={false} />
-                <YAxis
-                  yAxisId="left"
-                  stroke="#71717a"
-                  fontSize={11}
-                  tickLine={false}
-                  tickFormatter={(val) => `Rp ${(val / 1000000).toFixed(1)}Jt`}
-                />
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
-                  stroke="#38bdf8"
-                  fontSize={11}
-                  tickLine={false}
-                  allowDecimals={false}
-                  tickFormatter={(val) => `${val} cust`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#09090b',
-                    borderColor: '#27272a',
-                    borderRadius: '0.75rem',
-                    fontSize: '12px',
-                    color: '#fff'
-                  }}
-                  formatter={(val: any, name: any) => {
-                    if (name.includes('Pelanggan')) return [`${val} Pelanggan`, name];
-                    return [WhatsAppService.formatRupiah(Number(val)), name];
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                <Bar yAxisId="left" dataKey="revenue" name="Pemasukan Kas" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                <Bar yAxisId="left" dataKey="expenses" name="Pengeluaran" fill="#64748b" radius={[4, 4, 0, 0]} />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="customers"
-                  name="Pertumbuhan Pelanggan"
-                  stroke="#38bdf8"
-                  strokeWidth={3}
-                  dot={{ r: 4, fill: '#38bdf8' }}
-                />
-              </BarChart>
-            )}
-          </ResponsiveContainer>
-        </div>
-
-        {/* Highlight Insights Footer */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-zinc-800/80 text-xs text-zinc-400">
-          <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800/60 flex items-center justify-between">
-            <div>
-              <span className="block text-[11px] text-zinc-500 uppercase">Pertumbuhan Pelanggan</span>
-              <span className="text-sm font-bold text-sky-400 font-mono">+{customers.length} Warga Terpasang</span>
-            </div>
-            <Users className="w-5 h-5 text-sky-500/40" />
-          </div>
-
-          <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800/60 flex items-center justify-between">
-            <div>
-              <span className="block text-[11px] text-zinc-500 uppercase">Tren Omset Terkini</span>
-              <span className="text-sm font-bold text-emerald-400 font-mono">
-                {WhatsAppService.formatRupiah(totalIncome)}
-              </span>
-            </div>
-            <ArrowUpRight className="w-5 h-5 text-emerald-500/40" />
-          </div>
-
-          <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800/60 flex items-center justify-between">
-            <div>
-              <span className="block text-[11px] text-zinc-500 uppercase">Margin Laba Kas</span>
-              <span className="text-sm font-bold text-white font-mono">
-                {totalIncome > 0 ? `${Math.round((netProfit / totalIncome) * 100)}% Bersih` : '100%'}
-              </span>
-            </div>
-            <Wallet className="w-5 h-5 text-red-500/40" />
-          </div>
-        </div>
-      </div>
+      {/* Recharts Analytics: Monthly Revenue Summary (Incoming Payments vs Bills Issued over the last 6 months) */}
+      <MonthlyRevenueSummaryChart
+        bills={bills}
+        transactions={transactions}
+        customers={customers}
+        onNavigate={onNavigate}
+        onOpenRecordPayment={onOpenRecordPayment}
+      />
 
       {/* Visual Monthly Financial Presentation (Bars & Ratio) */}
       <div className="p-5 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-4">
@@ -1087,6 +1178,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {isolatedCustomers.length} Pelanggan
               </span>
             </div>
+
+            {overdueCustomersData.length > 0 && (
+              <div className="flex items-center justify-between p-2 rounded-lg bg-red-950/40 border border-red-600/70 shadow-sm animate-pulse">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+                  <span className="text-xs text-red-200 font-bold flex items-center gap-1.5">
+                    <AlertOctagon className="w-3.5 h-3.5 text-red-400" />
+                    Menunggak (Overdue)
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-mono font-black text-red-300 tabular-nums">
+                    {overdueCustomersData.length} Tagihan
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-red-600 text-white">
+                    PERINGATAN
+                  </span>
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between p-2 rounded-lg bg-zinc-950 border border-zinc-800/80">
               <div className="flex items-center gap-2">
@@ -1329,6 +1440,130 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         }}
         onTemplatesUpdated={onRefreshData}
       />
+
+      {/* Modal Preview & Quick-Dispatch Urgent Payment WhatsApp */}
+      {previewUrgentItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-xl bg-zinc-950 border border-red-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-red-900/50 bg-gradient-to-r from-red-950/80 via-zinc-900 to-zinc-900 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-red-600/20 text-red-400 border border-red-500/40">
+                  <AlertOctagon className="w-5 h-5 text-red-500 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                    Draft Pesan 'Urgent Payment' WhatsApp
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Kirim ke {previewUrgentItem.customer.name} ({previewUrgentItem.customer.phone})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setPreviewUrgentItem(null);
+                  setCopiedUrgentMsg(false);
+                }}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto">
+              {/* Target Customer & Bill Summary Pill */}
+              <div className="p-3 rounded-xl bg-zinc-900/90 border border-red-900/40 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div>
+                  <span className="text-zinc-400">Pelanggan:</span>{' '}
+                  <strong className="text-white">{previewUrgentItem.customer.name}</strong> ({previewUrgentItem.customer.customerCode})
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-red-600/30 text-red-300 border border-red-500/60">
+                    OVERDUE {previewUrgentItem.daysOverdue} HARI
+                  </span>
+                  <span className="font-mono font-bold text-red-400">
+                    {WhatsAppService.formatRupiah(previewUrgentItem.bill.amount)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Message Box */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-zinc-400">
+                  <span>Pratinjau Pesan yang Akan Dikirim:</span>
+                  <span className="text-[11px] text-emerald-400 font-mono">Format Resmi WhatsApp ISP</span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs font-mono text-zinc-200 whitespace-pre-wrap select-all leading-relaxed max-h-72 overflow-y-auto">
+                  {WhatsAppService.generateUrgentPaymentMessage(
+                    previewUrgentItem.bill,
+                    previewUrgentItem.customer,
+                    previewUrgentItem.daysOverdue
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-zinc-800 bg-zinc-900/50 flex flex-wrap items-center justify-between gap-2">
+              <button
+                onClick={() => {
+                  const text = WhatsAppService.generateUrgentPaymentMessage(
+                    previewUrgentItem.bill,
+                    previewUrgentItem.customer,
+                    previewUrgentItem.daysOverdue
+                  );
+                  navigator.clipboard.writeText(text);
+                  setCopiedUrgentMsg(true);
+                  setTimeout(() => setCopiedUrgentMsg(false), 3000);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold transition-colors"
+              >
+                {copiedUrgentMsg ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-400">Tersalin ke Clipboard!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    <span>Salin Pesan</span>
+                  </>
+                )}
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setPreviewUrgentItem(null);
+                    setCopiedUrgentMsg(false);
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-zinc-800 text-zinc-300 hover:text-white text-xs font-medium transition-colors"
+                >
+                  Tutup
+                </button>
+
+                <button
+                  onClick={() => {
+                    handleSendSingleUrgent(
+                      previewUrgentItem.bill,
+                      previewUrgentItem.customer,
+                      previewUrgentItem.daysOverdue
+                    );
+                    setPreviewUrgentItem(null);
+                    setCopiedUrgentMsg(false);
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold shadow-lg shadow-red-950 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <Send className="w-4 h-4 text-white" />
+                  <span>Kirim WhatsApp Sekarang</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

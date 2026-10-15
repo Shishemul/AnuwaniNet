@@ -118,7 +118,18 @@ export class DataService {
 
   // Bills
   static getBills(): Bill[] {
-    return getStorage<Bill[]>(KEYS.BILLS, initialBills);
+    const stored = getStorage<Bill[]>(KEYS.BILLS, initialBills);
+    if (stored && Array.isArray(stored)) {
+      const existingIds = new Set(stored.map(b => b.id));
+      const missing = initialBills.filter(b => !existingIds.has(b.id));
+      if (missing.length > 0) {
+        const merged = [...stored, ...missing];
+        setStorage(KEYS.BILLS, merged);
+        return merged;
+      }
+      return stored;
+    }
+    return initialBills;
   }
 
   static saveBills(bills: Bill[]) {
@@ -140,7 +151,18 @@ export class DataService {
 
   // Transactions
   static getTransactions(): Transaction[] {
-    return getStorage<Transaction[]>(KEYS.TRANSACTIONS, initialTransactions);
+    const stored = getStorage<Transaction[]>(KEYS.TRANSACTIONS, initialTransactions);
+    if (stored && Array.isArray(stored)) {
+      const existingIds = new Set(stored.map(t => t.id));
+      const missing = initialTransactions.filter(t => !existingIds.has(t.id));
+      if (missing.length > 0) {
+        const merged = [...stored, ...missing];
+        setStorage(KEYS.TRANSACTIONS, merged);
+        return merged;
+      }
+      return stored;
+    }
+    return initialTransactions;
   }
 
   static saveTransactions(trxs: Transaction[]) {

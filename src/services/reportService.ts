@@ -1,4 +1,4 @@
-import { Transaction, Bill, Voucher } from '../types';
+import { Transaction, Bill, Voucher, Customer } from '../types';
 import { DataService } from './dataService';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -331,7 +331,140 @@ export class ReportService {
     URL.revokeObjectURL(url);
   }
 
-  // 5. Professional PDF Export for Transactions
+  // 5. Export Customer Database to CSV for Reporting
+  static exportCustomersToCsv(
+    customers: Customer[],
+    filename?: string
+  ): { success: boolean; count: number; filename: string } {
+    const today = new Date().toISOString().split('T')[0];
+    const resolvedFilename = filename || `Database_Pelanggan_AnuwaniNet_${today}.csv`;
+
+    const headers = [
+      'No',
+      'Kode Pelanggan',
+      'Nama Pelanggan',
+      'No. WhatsApp / HP',
+      'Alamat',
+      'Email',
+      'Paket Internet',
+      'Tarif Bulanan (IDR)',
+      'Status Layanan',
+      'Username PPPoE',
+      'Password PPPoE',
+      'IP Address',
+      'MAC Address',
+      'Auto Isolir Ruijie',
+      'Tgl Jatuh Tempo',
+      'Tanggal Bergabung',
+      'Pembayaran Terakhir',
+      'ID Gateway Ruijie',
+      'Catatan'
+    ];
+
+    const formatStatus = (s: string) => {
+      switch (s) {
+        case 'active': return 'Aktif';
+        case 'isolated': return 'Terisolir';
+        case 'pending': return 'Pending Aktivasi';
+        case 'inactive': return 'Nonaktif';
+        default: return s || 'Aktif';
+      }
+    };
+
+    const rows = customers.map((c, idx) => [
+      idx + 1,
+      `"${(c.customerCode || '').replace(/"/g, '""')}"`,
+      `"${(c.name || '').replace(/"/g, '""')}"`,
+      `"${(c.phone || '').replace(/"/g, '""')}"`,
+      `"${(c.address || '').replace(/"/g, '""')}"`,
+      `"${(c.email || '-').replace(/"/g, '""')}"`,
+      `"${(c.packageName || '-').replace(/"/g, '""')}"`,
+      c.packagePrice || 0,
+      `"${formatStatus(c.status)}"`,
+      `"${(c.pppoeUsername || '-').replace(/"/g, '""')}"`,
+      `"${(c.pppoePassword || '-').replace(/"/g, '""')}"`,
+      `"${(c.ipAddress || '-').replace(/"/g, '""')}"`,
+      `"${(c.macAddress || '-').replace(/"/g, '""')}"`,
+      `"${c.autoIsolirEnabled ? 'Aktif' : 'Nonaktif'}"`,
+      c.billingDay || 1,
+      `"${c.joinDate || '-'}"`,
+      `"${c.lastPaymentDate || '-'}"`,
+      `"${(c.ruijieDeviceId || '-').replace(/"/g, '""')}"`,
+      `"${(c.notes || '-').replace(/"/g, '""')}"`
+    ]);
+
+    // Use \uFEFF BOM for Excel UTF-8 compatibility
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', resolvedFilename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    return {
+      success: true,
+      count: customers.length,
+      filename: resolvedFilename
+    };
+  }
+
+  // 6. Export Customer Database to Excel (.xlsx)
+  static exportCustomersToExcel(
+    customers: Customer[],
+    filename?: string
+  ): { success: boolean; count: number; filename: string } {
+    const today = new Date().toISOString().split('T')[0];
+    const resolvedFilename = filename || `Database_Pelanggan_AnuwaniNet_${today}.xlsx`;
+
+    const formatStatus = (s: string) => {
+      switch (s) {
+        case 'active': return 'Aktif';
+        case 'isolated': return 'Terisolir';
+        case 'pending': return 'Pending Aktivasi';
+        case 'inactive': return 'Nonaktif';
+        default: return s || 'Aktif';
+      }
+    };
+
+    const wb = XLSX.utils.book_new();
+    const dataRows = customers.map((c, idx) => ({
+      No: idx + 1,
+      'Kode Pelanggan': c.customerCode,
+      'Nama Pelanggan': c.name,
+      'No. WhatsApp / HP': c.phone,
+      Alamat: c.address,
+      Email: c.email || '-',
+      'Paket Internet': c.packageName,
+      'Tarif Bulanan (IDR)': c.packagePrice,
+      'Status Layanan': formatStatus(c.status),
+      'Username PPPoE': c.pppoeUsername,
+      'Password PPPoE': c.pppoePassword,
+      'IP Address': c.ipAddress,
+      'MAC Address': c.macAddress,
+      'Auto-Isolir Ruijie': c.autoIsolirEnabled ? 'Aktif' : 'Nonaktif',
+      'Tgl Jatuh Tempo': `Tgl ${c.billingDay}`,
+      'Tanggal Bergabung': c.joinDate || '-',
+      'Pembayaran Terakhir': c.lastPaymentDate || '-',
+      'ID Gateway Ruijie': c.ruijieDeviceId || '-',
+      Catatan: c.notes || '-'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(dataRows);
+    XLSX.utils.book_append_sheet(wb, ws, 'Database Pelanggan');
+    XLSX.writeFile(wb, resolvedFilename);
+
+    return {
+      success: true,
+      count: customers.length,
+      filename: resolvedFilename
+    };
+  }
+
+  // 7. Professional PDF Export for Transactions
   static exportTransactionsToPdf(
     transactions: Transaction[],
     summary?: ReportSummary,

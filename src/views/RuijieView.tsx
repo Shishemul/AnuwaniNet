@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Customer, RuijieConfig, RuijieDevice } from '../types';
+import { Customer, RuijieConfig, RuijieDevice, InternetPackage } from '../types';
 import { useAuth } from '../context/AuthContext';
 import {
   Server,
@@ -17,22 +17,28 @@ import {
   Globe,
   Sliders,
   Send,
-  Network
+  Network,
+  Download,
+  Zap,
+  Router
 } from 'lucide-react';
 import { RuijieService, RuijieExecutionLog } from '../services/ruijieService';
 import { DataService } from '../services/dataService';
 import { WhatsAppService } from '../services/whatsappService';
 import { NetworkTopologyView } from '../components/NetworkTopologyView';
+import { RuijieImportModal } from '../components/modals/RuijieImportModal';
 
 interface RuijieViewProps {
   devices: RuijieDevice[];
   customers: Customer[];
+  packages?: InternetPackage[];
   onRefreshData: () => void;
 }
 
 export const RuijieView: React.FC<RuijieViewProps> = ({
   devices,
   customers,
+  packages,
   onRefreshData
 }) => {
   const { currentUser } = useAuth();
@@ -43,10 +49,29 @@ export const RuijieView: React.FC<RuijieViewProps> = ({
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; latency?: number } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isImportingRealData, setIsImportingRealData] = useState(false);
+  const [showRuijieImportModal, setShowRuijieImportModal] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   const isolatedCustomers = customers.filter(c => c.status === 'isolated');
   const activeCustomers = customers.filter(c => c.status === 'active');
+  const availablePackages = packages || DataService.getPackages();
+
+  const handleImportRealDataDirect = async () => {
+    setIsImportingRealData(true);
+    setActionNotice('Memindai Ruijie Reyee Gateway RG-EG3250 & Reyee Cloud...');
+    try {
+      const res = await RuijieService.importRealRuijieDataNow();
+      setLogs(RuijieService.getLogs());
+      onRefreshData();
+      setActionNotice(res.message);
+    } catch (e: any) {
+      setActionNotice(e?.message || 'Gagal mengimpor real data Ruijie');
+    } finally {
+      setIsImportingRealData(false);
+      setTimeout(() => setActionNotice(null), 6000);
+    }
+  };
 
   const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,7 +156,32 @@ export const RuijieView: React.FC<RuijieViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 1-Click Real Data Import from Ruijie Gateway into Database */}
+          <button
+            onClick={handleImportRealDataDirect}
+            disabled={isImportingRealData}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-950 border border-emerald-850 text-emerald-300 hover:bg-emerald-900 transition-colors shadow-sm cursor-pointer disabled:opacity-60"
+            title="Tarik langsung seluruh data real pelanggan PPPoE dari Ruijie Gateway EG3250 dan simpan ke Database dalam 1-Klik"
+          >
+            {isImportingRealData ? (
+              <RefreshCw className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+            ) : (
+              <Zap className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            <span>1-Klik Tarik Real Data Ruijie</span>
+          </button>
+
+          {/* Detailed Ruijie Import Modal (Scan / Upload / CSV) */}
+          <button
+            onClick={() => setShowRuijieImportModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
+            title="Buka panel pemindaian gateway Ruijie atau upload file eWeb CSV/JSON"
+          >
+            <Router className="w-3.5 h-3.5 text-red-500" />
+            <span>Import Pelanggan Ruijie</span>
+          </button>
+
           {isSuperadmin && (
             <button
               onClick={handleSyncVouchers}
@@ -140,7 +190,7 @@ export const RuijieView: React.FC<RuijieViewProps> = ({
               title="Sinkronisasi kode voucher hotspot ke Cloud Ruijie Reyee"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-red-500 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>Sinkron Voucher ke Ruijie</span>
+              <span>Sinkron Voucher</span>
             </button>
           )}
 
@@ -149,7 +199,7 @@ export const RuijieView: React.FC<RuijieViewProps> = ({
             className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors shadow-sm shadow-red-950"
           >
             <ShieldAlert className="w-4 h-4" />
-            <span>Jalankan Auto Isolir Sekarang</span>
+            <span>Jalankan Auto Isolir</span>
           </button>
         </div>
       </div>
@@ -444,6 +494,19 @@ export const RuijieView: React.FC<RuijieViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Ruijie Real Customer Discovery & Import Modal */}
+      <RuijieImportModal
+        isOpen={showRuijieImportModal}
+        onClose={() => setShowRuijieImportModal(false)}
+        packages={availablePackages}
+        onImportSuccess={count => {
+          setLogs(RuijieService.getLogs());
+          onRefreshData();
+          setActionNotice(`Berhasil mengimpor ${count} data real pelanggan dari Ruijie Reyee ke Database!`);
+          setTimeout(() => setActionNotice(null), 5000);
+        }}
+      />
     </div>
   );
 };

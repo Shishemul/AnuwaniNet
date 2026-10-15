@@ -195,9 +195,18 @@ export interface SupabaseConfig {
   mysqlPassword?: string;
   isConnected: boolean;
   lastTested?: string;
-  backupIntervalHours?: number; // e.g., 6, 12, 24 hours
-  lastBackupAt?: string;
+  backupIntervalHours?: number; // e.g., 1, 6, 12, 24, 48, 168 hours
+  backupFrequency?: 'hourly' | 'every_6_hours' | 'every_12_hours' | 'daily' | 'every_2_days' | 'weekly' | 'custom';
+  backupExecutionTime?: string; // e.g. "02:00" WIB
   autoBackupEnabled?: boolean;
+  autoDownloadOnScheduled?: boolean;
+  backupRetentionCount?: number;
+  lastBackupAt?: string;
+  lastSuccessfulBackupAt?: string;
+  lastSuccessfulBackupTimestamp?: number;
+  lastBackupStatus?: 'completed' | 'failed' | 'in_progress';
+  lastBackupSizeKb?: number;
+  lastBackupRecordCount?: number;
   lastSettingsSavedAt?: string;
 }
 

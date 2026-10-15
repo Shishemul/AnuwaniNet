@@ -24,13 +24,17 @@ import {
   UserCheck,
   UserX,
   Clock,
-  Router
+  Router,
+  Download,
+  FileSpreadsheet
 } from 'lucide-react';
 import { RuijieService } from '../services/ruijieService';
 import { WhatsAppService } from '../services/whatsappService';
 import { DataService } from '../services/dataService';
+import { ReportService } from '../services/reportService';
 import { WhatsAppTemplateModal } from '../components/modals/WhatsAppTemplateModal';
 import { RuijieImportModal } from '../components/modals/RuijieImportModal';
+import { ExportCustomerCsvModal } from '../components/modals/ExportCustomerCsvModal';
 
 interface PelangganViewProps {
   customers: Customer[];
@@ -54,6 +58,7 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showRuijieImportModal, setShowRuijieImportModal] = useState(false);
+  const [showExportCsvModal, setShowExportCsvModal] = useState(false);
   const [selectedCustomerForTemplate, setSelectedCustomerForTemplate] = useState<Customer | null>(null);
 
   // Status metrics counts
@@ -151,6 +156,21 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
     WhatsAppService.openWhatsAppUrl(c.phone, defaultMsg);
   };
 
+  const handleQuickExportCsv = () => {
+    const target = isFiltered ? filteredCustomers : customers;
+    if (target.length === 0) {
+      setActionMessage('Tidak ada data pelanggan untuk diekspor.');
+      setTimeout(() => setActionMessage(null), 3000);
+      return;
+    }
+    const today = new Date().toISOString().split('T')[0];
+    const prefix = isFiltered ? 'Pelanggan_Terfilter' : 'Database_Pelanggan';
+    const filename = `${prefix}_AnuwaniNet_${today}.csv`;
+    const res = ReportService.exportCustomersToCsv(target, filename);
+    setActionMessage(`Berhasil mengekspor ${res.count} data pelanggan ke format CSV (${res.filename})!`);
+    setTimeout(() => setActionMessage(null), 5000);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header & Controls */}
@@ -173,6 +193,16 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
           >
             <Router className="w-4 h-4 text-red-500" />
             <span>Import dari Ruijie</span>
+          </button>
+
+          {/* Export Database Pelanggan to CSV */}
+          <button
+            onClick={() => setShowExportCsvModal(true)}
+            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-950/80 border border-emerald-800/90 text-emerald-300 hover:text-white hover:bg-emerald-900 transition-colors shadow-sm cursor-pointer"
+            title="Ekspor seluruh database pelanggan atau hasil filter ke format file CSV untuk pelaporan & analisis spreadsheet"
+          >
+            <Download className="w-4 h-4 text-emerald-400" />
+            <span>Export CSV</span>
           </button>
 
           <button
@@ -410,8 +440,20 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
             )}
           </div>
 
-          <div className="text-[11px] text-zinc-400 font-medium">
-            Menampilkan <strong className="text-white font-mono">{filteredCustomers.length}</strong> dari <span className="font-mono">{customers.length}</span> pelanggan
+          <div className="flex items-center gap-3">
+            <div className="text-[11px] text-zinc-400 font-medium">
+              Menampilkan <strong className="text-white font-mono">{filteredCustomers.length}</strong> dari <span className="font-mono">{customers.length}</span> pelanggan
+            </div>
+
+            <button
+              type="button"
+              onClick={handleQuickExportCsv}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-800/80 text-[11px] font-semibold text-emerald-300 hover:text-white transition-colors cursor-pointer shadow-xs"
+              title="Unduh langsung data pelanggan yang sedang tampil ke file CSV"
+            >
+              <Download className="w-3 h-3 text-emerald-400" />
+              <span>Unduh CSV ({filteredCustomers.length})</span>
+            </button>
           </div>
         </div>
       </div>
@@ -629,6 +671,19 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
           setActionMessage(`Berhasil mengimpor ${count} data pelanggan dari Ruijie Gateway dan data telah tersimpan di Database!`);
           onRefreshData();
           setTimeout(() => setActionMessage(null), 5000);
+        }}
+      />
+
+      {/* Export Customer Database to CSV / Excel Modal */}
+      <ExportCustomerCsvModal
+        isOpen={showExportCsvModal}
+        onClose={() => setShowExportCsvModal(false)}
+        allCustomers={customers}
+        filteredCustomers={filteredCustomers}
+        isFiltered={isFiltered}
+        onSuccessNotice={(msg) => {
+          setActionMessage(msg);
+          setTimeout(() => setActionMessage(null), 6000);
         }}
       />
     </div>

@@ -30,21 +30,8 @@ const STORAGE_AUTH_USER = 'anw_current_user_v1';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<User[]>(() => DataService.getUsers());
-  // Tampilan awal aplikasi adalah login: jika belum login, currentUser bernilai null
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_AUTH_USER);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const fresh = DataService.getUsers().find(u => u.id === parsed.id);
-        if (fresh && fresh.status !== 'suspended') return fresh;
-      }
-    } catch {
-      // fallback
-    }
-    // Default null agar tampilan awal selalu login
-    return null;
-  });
+  // Force tampilan awal selalu ke login user saat aplikasi dibuka / pertama kali dimuat
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Sinkronisasi local storage
   useEffect(() => {

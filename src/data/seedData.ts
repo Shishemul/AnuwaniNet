@@ -297,6 +297,57 @@ export const initialBills: Bill[] = [
     dueDate: '2026-09-20',
     status: 'overdue',
     whatsappReminderSent: true
+  },
+  {
+    id: 'bill-106',
+    billNumber: 'INV-202609-001',
+    customerId: 'cust-1',
+    customerName: 'Budi Santoso',
+    customerPhone: '085711223344',
+    packageId: 'pkg-2',
+    packageName: 'Paket Keluarga 20 Mbps',
+    amount: 165000,
+    period: 'September 2026',
+    dueDate: '2026-09-20',
+    status: 'paid',
+    paidAt: '2026-09-05 10:15',
+    paymentMethod: 'qris',
+    transactionRef: 'QRIS-ANW-881920',
+    whatsappReminderSent: true
+  },
+  {
+    id: 'bill-107',
+    billNumber: 'INV-202608-001',
+    customerId: 'cust-1',
+    customerName: 'Budi Santoso',
+    customerPhone: '085711223344',
+    packageId: 'pkg-2',
+    packageName: 'Paket Keluarga 20 Mbps',
+    amount: 165000,
+    period: 'Agustus 2026',
+    dueDate: '2026-08-20',
+    status: 'paid',
+    paidAt: '2026-08-04 11:30',
+    paymentMethod: 'dana',
+    transactionRef: 'DANA-TAG-INV20260801',
+    whatsappReminderSent: true
+  },
+  {
+    id: 'bill-108',
+    billNumber: 'INV-202607-001',
+    customerId: 'cust-1',
+    customerName: 'Budi Santoso',
+    customerPhone: '085711223344',
+    packageId: 'pkg-2',
+    packageName: 'Paket Keluarga 20 Mbps',
+    amount: 165000,
+    period: 'Juli 2026',
+    dueDate: '2026-07-20',
+    status: 'paid',
+    paidAt: '2026-07-06 09:20',
+    paymentMethod: 'transfer',
+    transactionRef: 'BCA-TRF-371902',
+    whatsappReminderSent: true
   }
 ];
 
@@ -394,6 +445,62 @@ export const initialTransactions: Transaction[] = [
     status: 'completed',
     notes: 'Listrik server NOC & UPS',
     whatsappNotificationSent: false
+  },
+  {
+    id: 'trx-8',
+    invoiceNumber: 'TRX-202609-001',
+    customerId: 'cust-1',
+    customerName: 'Budi Santoso',
+    type: 'tagihan',
+    category: 'income',
+    amount: 165000,
+    date: '2026-09-05 10:15',
+    paymentMethod: 'qris',
+    status: 'completed',
+    notes: 'Pembayaran Tagihan September 2026',
+    whatsappNotificationSent: true
+  },
+  {
+    id: 'trx-9',
+    invoiceNumber: 'TRX-202608-001',
+    customerId: 'cust-1',
+    customerName: 'Budi Santoso',
+    type: 'tagihan',
+    category: 'income',
+    amount: 165000,
+    date: '2026-08-04 11:30',
+    paymentMethod: 'dana',
+    status: 'completed',
+    notes: 'Pembayaran Tagihan Agustus 2026 via DANA E-Wallet',
+    whatsappNotificationSent: true
+  },
+  {
+    id: 'trx-10',
+    invoiceNumber: 'TRX-202607-001',
+    customerId: 'cust-1',
+    customerName: 'Budi Santoso',
+    type: 'tagihan',
+    category: 'income',
+    amount: 165000,
+    date: '2026-07-06 09:20',
+    paymentMethod: 'transfer',
+    status: 'completed',
+    notes: 'Pembayaran Tagihan Juli 2026 via Transfer Bank BCA',
+    whatsappNotificationSent: true
+  },
+  {
+    id: 'trx-11',
+    invoiceNumber: 'TRX-202601-001',
+    customerId: 'cust-1',
+    customerName: 'Budi Santoso',
+    type: 'pemasangan',
+    category: 'income',
+    amount: 250000,
+    date: '2026-01-15 14:00',
+    paymentMethod: 'cash',
+    status: 'completed',
+    notes: 'Biaya Instalasi Kabel Dropcore & Registrasi Awal Pelanggan',
+    whatsappNotificationSent: true
   }
 ];
 

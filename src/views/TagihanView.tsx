@@ -23,6 +23,7 @@ import { DanaService } from '../services/danaService';
 import { ReportService } from '../services/reportService';
 import { WhatsAppTemplateModal } from '../components/modals/WhatsAppTemplateModal';
 import { BulkGenerateBillsModal } from '../components/modals/BulkGenerateBillsModal';
+import { BulkWaNotifyModal } from '../components/modals/BulkWaNotifyModal';
 
 interface TagihanViewProps {
   bills: Bill[];
@@ -48,6 +49,7 @@ export const TagihanView: React.FC<TagihanViewProps> = ({
 
   // Modal States
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showBulkWaModal, setShowBulkWaModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [selectedBillForTemplate, setSelectedBillForTemplate] = useState<Bill | null>(null);
   const [selectedCustomerForTemplate, setSelectedCustomerForTemplate] = useState<Customer | null>(null);
@@ -185,6 +187,21 @@ export const TagihanView: React.FC<TagihanViewProps> = ({
             <span>Template Pesan WA</span>
           </button>
 
+          {/* Bulk WhatsApp Notify in 1-Click */}
+          <button
+            onClick={() => setShowBulkWaModal(true)}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm shadow-emerald-950 cursor-pointer"
+            title="Kirim pesan pengingat jatuh tempo secara massal dalam 1-klik ke semua pelanggan dengan status belum bayar (unpaid)"
+          >
+            <Send className="w-4 h-4" />
+            <span>Bulk WhatsApp Notify</span>
+            {unpaidCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-emerald-900 text-emerald-200 text-[10px] font-bold">
+                {unpaidCount}
+              </span>
+            )}
+          </button>
+
           <button
             onClick={() => {
               const res = WhatsAppService.runAutoReminderPelanggan();
@@ -192,11 +209,11 @@ export const TagihanView: React.FC<TagihanViewProps> = ({
               onRefreshData();
               setTimeout(() => setNotificationStatus(null), 6000);
             }}
-            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-950 border border-emerald-800 text-emerald-300 hover:bg-emerald-900 transition-colors shadow-sm"
+            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:bg-zinc-800 transition-colors shadow-sm"
             title="Kirim pesan peringatan jatuh tempo otomatis ke nomor WhatsApp pelanggan tertunggak"
           >
             <BellRing className="w-4 h-4 text-emerald-400" />
-            <span>Auto-Reminder Bot WA</span>
+            <span>Auto-Reminder Bot</span>
           </button>
 
           {/* Export PDF Tagihan */}
@@ -529,6 +546,19 @@ export const TagihanView: React.FC<TagihanViewProps> = ({
         customers={customers}
         existingBills={bills}
         onBillsGenerated={(_newBills, message) => {
+          setNotificationStatus(message);
+          onRefreshData();
+          setTimeout(() => setNotificationStatus(null), 6000);
+        }}
+      />
+
+      {/* Bulk WhatsApp Notify Modal for All Unpaid Customers */}
+      <BulkWaNotifyModal
+        isOpen={showBulkWaModal}
+        onClose={() => setShowBulkWaModal(false)}
+        bills={bills}
+        customers={customers}
+        onNotificationComplete={(_sentCount, message) => {
           setNotificationStatus(message);
           onRefreshData();
           setTimeout(() => setNotificationStatus(null), 6000);

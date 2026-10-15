@@ -371,6 +371,63 @@ export class RuijieService {
         billingDay: 20,
         rateLimit: '20M / 10M',
         notes: 'Ruijie Reyee Hotspot / PPPoE Client - Signal -18dBm'
+      },
+      {
+        customerCode: 'ANW-012',
+        name: 'Hendra Saputra',
+        phone: '081900112288',
+        address: 'Jl. Cempaka Putih No. 42 RT 04 / RW 03',
+        email: 'hendra.saputra@gmail.com',
+        pppoeUsername: 'hendra_anw012',
+        pppoePassword: 'passHendra2026',
+        ipAddress: '192.168.10.28',
+        macAddress: '00:1A:A9:74:22:81',
+        packageId: pkg3.id,
+        packageName: pkg3.name,
+        packagePrice: pkg3.price,
+        status: 'active' as const,
+        ruijieDeviceId: 'dev-1',
+        billingDay: 20,
+        rateLimit: '50M / 25M',
+        notes: 'Port GE3 Ruijie Reyee Switch - ONT Bridge Mode'
+      },
+      {
+        customerCode: 'ANW-013',
+        name: 'Tini Martini',
+        phone: '087812994433',
+        address: 'Gang Mawar Indah No. 18 RT 02 / RW 06',
+        email: 'tini.martini@yahoo.com',
+        pppoeUsername: 'tini_anw013',
+        pppoePassword: 'passTini2026',
+        ipAddress: '192.168.10.29',
+        macAddress: 'D8:B0:4C:61:90:3A',
+        packageId: pkg1.id,
+        packageName: pkg1.name,
+        packagePrice: pkg1.price,
+        status: 'active' as const,
+        ruijieDeviceId: 'dev-1',
+        billingDay: 20,
+        rateLimit: '10M / 5M',
+        notes: 'Terdaftar di Reyee Cloud eWeb - ODP-03 Port 2'
+      },
+      {
+        customerCode: 'ANW-014',
+        name: 'Agus Riyadi',
+        phone: '085277889900',
+        address: 'Jl. Melati Baru Kav. 5 RT 01 / RW 02',
+        email: 'agus.riyadi@gmail.com',
+        pppoeUsername: 'agus_anw014',
+        pppoePassword: 'passAgus2026',
+        ipAddress: '192.168.10.30',
+        macAddress: '04:FE:8D:11:7C:E5',
+        packageId: pkg2.id,
+        packageName: pkg2.name,
+        packagePrice: pkg2.price,
+        status: 'active' as const,
+        ruijieDeviceId: 'dev-1',
+        billingDay: 20,
+        rateLimit: '20M / 10M',
+        notes: 'Ruijie Gateway PPPoE Live Session - Uptime 14 Hari'
       }
     ];
 
@@ -592,6 +649,35 @@ joko_rj03,passJoko2026,Joko Widodo,082188990022,Jl. Anggrek RT 04/05 No. 88,192.
       importedCount,
       updatedCount,
       message: `Berhasil mengimpor ${importedCount} pelanggan baru dan memperbarui ${updatedCount} pelanggan dari Ruijie. Data telah tersimpan di Database!`
+    };
+  }
+
+  // 10. Direct 1-Click Import Real Data from Ruijie Gateway & Reyee Cloud into Database
+  static async importRealRuijieDataNow(): Promise<{
+    success: boolean;
+    importedCount: number;
+    updatedCount: number;
+    totalDiscovered: number;
+    message: string;
+  }> {
+    const discovery = await this.fetchCustomersFromRuijieGateway();
+    if (!discovery.success || !discovery.customers.length) {
+      return {
+        success: false,
+        importedCount: 0,
+        updatedCount: 0,
+        totalDiscovered: 0,
+        message: discovery.message || 'Gagal memindai gateway Ruijie Reyee.'
+      };
+    }
+
+    const res = this.importCustomers(discovery.customers, { saveToDatabase: true });
+    return {
+      success: res.success,
+      importedCount: res.importedCount,
+      updatedCount: res.updatedCount,
+      totalDiscovered: discovery.customers.length,
+      message: `Sinkronisasi Real Data Ruijie Selesai: ${res.importedCount} pelanggan baru dan ${res.updatedCount} pelanggan terupdate berhasil disimpan ke Database.`
     };
   }
 }
