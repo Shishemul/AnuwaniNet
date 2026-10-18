@@ -99,16 +99,20 @@ export const WhatsAppTemplateModal: React.FC<WhatsAppTemplateModalProps> = ({
 
   // Placeholder insertion helper
   const availablePlaceholders = [
-    { tag: '{NAMA}', label: 'Nama Pelanggan', example: sampleCustomer.name },
-    { tag: '{JUMLAH}', label: 'Total Nominal Tagihan', example: WhatsAppService.formatRupiah(sampleBill.amount) },
-    { tag: '{NO_TAGIHAN}', label: 'No. Invoice / Tagihan', example: sampleBill.billNumber },
-    { tag: '{PERIODE}', label: 'Periode Tagihan', example: sampleBill.period },
-    { tag: '{JATUH_TEMPO}', label: 'Tanggal Jatuh Tempo', example: sampleBill.dueDate },
-    { tag: '{PAKET}', label: 'Nama Paket Internet', example: sampleCustomer.packageName },
-    { tag: '{LINK_DANA}', label: 'Link Bayar DANA & QRIS', example: 'https://link.dana.id/pay?...' },
-    { tag: '{ID_PELANGGAN}', label: 'Kode ID Pelanggan', example: sampleCustomer.customerCode },
-    { tag: '{TANGGAL_ISOLIR}', label: 'Estimasi Tanggal Isolir', example: `${sampleCustomer.billingDay + 2} ${sampleBill.period}` },
-    { tag: '{NO_HP}', label: 'Nomor WhatsApp', example: sampleCustomer.phone }
+    { tag: '{{customer_name}}', label: 'Nama Pelanggan', example: sampleCustomer.name },
+    { tag: '{{bill_amount}}', label: 'Total Nominal Tagihan', example: WhatsAppService.formatRupiah(sampleBill.amount) },
+    { tag: '{{due_date}}', label: 'Tanggal Jatuh Tempo', example: sampleBill.dueDate },
+    { tag: '{{customer_code}}', label: 'ID Pelanggan', example: sampleCustomer.customerCode },
+    { tag: '{{bill_number}}', label: 'No. Tagihan / Invoice', example: sampleBill.billNumber },
+    { tag: '{{period}}', label: 'Periode Tagihan', example: sampleBill.period },
+    { tag: '{{package_name}}', label: 'Nama Paket Internet', example: sampleCustomer.packageName },
+    { tag: '{{payment_link}}', label: 'Link Bayar DANA & QRIS', example: 'https://link.dana.id/pay?...' },
+    { tag: '{{days_overdue}}', label: 'Hari Keterlambatan', example: '3' },
+    { tag: '{{customer_phone}}', label: 'Nomor WhatsApp', example: sampleCustomer.phone },
+    { tag: '{{customer_address}}', label: 'Alamat Pelanggan', example: sampleCustomer.address || '-' },
+    { tag: '{NAMA}', label: 'Nama (Alias)', example: sampleCustomer.name },
+    { tag: '{JUMLAH}', label: 'Nominal (Alias)', example: WhatsAppService.formatRupiah(sampleBill.amount) },
+    { tag: '{JATUH_TEMPO}', label: 'Jatuh Tempo (Alias)', example: sampleBill.dueDate }
   ];
 
   const handleInsertPlaceholder = (tag: string) => {

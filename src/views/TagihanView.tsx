@@ -21,6 +21,7 @@ import { WhatsAppService } from '../services/whatsappService';
 import { DataService } from '../services/dataService';
 import { DanaService } from '../services/danaService';
 import { ReportService } from '../services/reportService';
+import { NotificationService } from '../services/notificationService';
 import { WhatsAppTemplateModal } from '../components/modals/WhatsAppTemplateModal';
 import { BulkGenerateBillsModal } from '../components/modals/BulkGenerateBillsModal';
 import { BulkWaNotifyModal } from '../components/modals/BulkWaNotifyModal';
@@ -132,6 +133,13 @@ export const TagihanView: React.FC<TagihanViewProps> = ({
     if (generatedCount > 0) {
       DataService.saveBills(existingBills);
       onRefreshData();
+
+      NotificationService.logAutoBilling({
+        generatedCount,
+        period: currentMonthYear,
+        details: `Penerbitan tagihan bulanan: ${generatedCount} lembar tagihan baru untuk ${currentMonthYear} berhasil digenerate!`
+      });
+
       setNotificationStatus(`Berhasil membuat ${generatedCount} tagihan baru untuk ${currentMonthYear} & notifikasi WhatsApp otomatis telah dikirim ke nomor pelanggan!`);
       setTimeout(() => setNotificationStatus(null), 5000);
     } else {
@@ -343,9 +351,171 @@ export const TagihanView: React.FC<TagihanViewProps> = ({
         </div>
       </div>
 
-      {/* Bills Table */}
+      {/* Bills List: Mobile Cards + Desktop Table */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile View: Touch-Friendly Bill Cards (< md) */}
+        <div className="block md:hidden p-3 space-y-3">
+          {filteredBills.length === 0 ? (
+            <div className="py-8 text-center text-zinc-500 space-y-2">
+              <Receipt className="w-8 h-8 mx-auto text-zinc-600" />
+              <div className="text-white font-medium text-xs">Tidak ada tagihan yang sesuai filter</div>
+            </div>
+          ) : (
+            filteredBills.map(bill => {
+              const isPaid = bill.status === 'paid';
+              const isOverdue = bill.status === 'overdue';
+
+              return (
+                <div
+                  key={'bill-card-' + bill.id}
+                  className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800/90 space-y-3 shadow-sm"
+                >
+                  {/* Top: Invoice No, Period & Status */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-mono text-xs font-bold text-white">{bill.billNumber}</div>
+                      <div className="text-[11px] text-zinc-400 font-medium">{bill.period}</div>
+                    </div>
+
+                    <div className="shrink-0">
+                      {isPaid && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-semibold text-emerald-400 bg-emerald-950/80 border border-emerald-900">
+                          <CheckCircle className="w-3 h-3" />
+                          Lunas
+                        </span>
+                      )}
+                      {isOverdue && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-semibold text-red-400 bg-red-950 border border-red-800 animate-pulse">
+                          <AlertTriangle className="w-3 h-3" />
+                          Tertunggak
+                        </span>
+                      )}
+                      {!isPaid && !isOverdue && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-semibold text-amber-400 bg-amber-950/80 border border-amber-900">
+                          <Clock className="w-3 h-3" />
+                          Belum Bayar
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Customer & Package */}
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-zinc-800/60">
+                    <div>
+                      <div className="font-semibold text-white">{bill.customerName}</div>
+                      <div className="text-[10px] text-zinc-500 font-sans">{bill.packageName}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-mono font-black text-sm text-white tabular-nums">
+                        {WhatsAppService.formatRupiah(bill.amount)}
+                      </div>
+                      <div className={`font-mono text-[10px] ${isOverdue ? 'text-red-400 font-semibold' : 'text-zinc-400'}`}>
+                        Jatuh tempo: {bill.dueDate}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment Details if paid */}
+                  {isPaid && (
+                    <div className="p-2 rounded-lg bg-zinc-900/60 border border-zinc-800/60 text-[11px] flex items-center justify-between font-mono">
+                      <span className="text-zinc-400">Metode: <strong className="text-zinc-200 uppercase">{bill.paymentMethod}</strong></span>
+                      <span className="text-zinc-500 text-[10px]">{bill.paidAt}</span>
+                    </div>
+                  )}
+
+                  {/* Action Buttons Row */}
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-zinc-800/60">
+                    <div className="flex items-center gap-1">
+                      {!isPaid ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleSendWaReminder(bill)}
+                            className="px-2.5 py-1.5 rounded-lg bg-emerald-950/70 border border-emerald-800 text-emerald-300 hover:bg-emerald-900 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                            title="Kirim Reminder WhatsApp"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span>Kirim WA</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedBillForTemplate(bill);
+                              const cust = customers.find(c => c.id === bill.customerId) || null;
+                              setSelectedCustomerForTemplate(cust);
+                              setShowTemplateModal(true);
+                            }}
+                            className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-emerald-400 cursor-pointer"
+                            title="Template WA"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const msg = WhatsAppService.generateReceiptMessage(bill, bill.customerName);
+                            WhatsAppService.openWhatsAppUrl(bill.customerPhone, msg);
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-emerald-950/70 border border-emerald-800 text-emerald-300 hover:bg-emerald-900 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                          title="Kirim Kuitansi Lunas"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Kuitansi WA</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => onPrintBill(bill)}
+                        className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white cursor-pointer"
+                        title="Cetak Kuitansi"
+                      >
+                        <Printer className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      {!isPaid && onOpenDanaCheckout && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const session = DanaService.createPaymentSession({
+                              itemType: 'bill',
+                              itemTitle: `Tagihan ${bill.packageName} (${bill.period})`,
+                              itemRefId: bill.id,
+                              amount: bill.amount,
+                              customerName: bill.customerName,
+                              customerPhone: bill.customerPhone
+                            });
+                            onOpenDanaCheckout(session);
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          DANA
+                        </button>
+                      )}
+
+                      {!isPaid && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenRecordPayment(bill)}
+                          className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          Bayar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop View: Full Table (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-zinc-800 bg-zinc-950/80 text-zinc-400 uppercase tracking-wider text-[11px]">

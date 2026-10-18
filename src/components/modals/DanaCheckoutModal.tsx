@@ -73,8 +73,8 @@ export const DanaCheckoutModal: React.FC<DanaCheckoutModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-zinc-950 border border-zinc-800 shadow-2xl overflow-hidden font-sans">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-4 animate-in fade-in duration-150">
+      <div className="w-full max-w-md rounded-2xl bg-zinc-950 border border-zinc-800 shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto font-sans">
         {/* DANA Header */}
         <div className="bg-gradient-to-r from-sky-600 to-blue-700 p-4 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
   AppSettings,
@@ -6,12 +6,15 @@ import {
   DanaGatewayConfig,
   WhatsAppBotConfig,
   SupabaseConfig,
-  DanaPaymentSession
+  DanaPaymentSession,
+  Customer,
+  Bill
 } from '../types';
 import { DataService } from '../services/dataService';
 import { RuijieService } from '../services/ruijieService';
 import { DanaService } from '../services/danaService';
 import { FonnteService } from '../services/fonnteService';
+import { WhatsAppService } from '../services/whatsappService';
 import {
   getStoredSupabaseConfig,
   saveStoredSupabaseConfig,
@@ -67,9 +70,19 @@ import {
   Filter,
   Trash2,
   Activity,
-  Info
+  Info,
+  User,
+  Lock,
+  Eye,
+  EyeOff,
+  MessageSquare,
+  BellRing,
+  Router,
+  SlidersHorizontal,
+  RotateCcw
 } from 'lucide-react';
 import { WhatsAppTemplateModal } from '../components/modals/WhatsAppTemplateModal';
+import { RuijieImportModal } from '../components/modals/RuijieImportModal';
 import { HostingTutorialSection } from '../components/HostingTutorialSection';
 
 interface PengaturanSuperadminViewProps {
@@ -84,7 +97,16 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
   const { currentUser } = useAuth();
 
   // Tab inside unified settings
-  const [activeSection, setActiveSection] = useState<'app' | 'backup' | 'ruijie' | 'dana' | 'whatsapp' | 'tutorial'>('app');
+  const [activeSection, setActiveSection] = useState<'app' | 'backup' | 'ruijie' | 'dana' | 'whatsapp' | 'templates' | 'tutorial'>('app');
+
+  // Dedicated WhatsApp Message Templates States
+  const [templateActiveTab, setTemplateActiveTab] = useState<'reminder' | 'urgent' | 'receipt' | 'isolir'>('reminder');
+  const [copiedPlaceholder, setCopiedPlaceholder] = useState<string | null>(null);
+  const [templateNotice, setTemplateNotice] = useState<string | null>(null);
+  const [previewCustomerScenario, setPreviewCustomerScenario] = useState<'normal' | 'overdue'>('normal');
+  const [previewTestPhone, setPreviewTestPhone] = useState<string>('081234567890');
+  const [isSendingPreviewTest, setIsSendingPreviewTest] = useState(false);
+  const templateTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // States
   const [appSettings, setAppSettings] = useState<AppSettings>(() => DataService.getAppSettings());
@@ -96,6 +118,10 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
   const [notice, setNotice] = useState<string | null>(null);
   const [ruijieTestResult, setRuijieTestResult] = useState<{ success: boolean; latency?: number; message: string } | null>(null);
   const [isTestingRuijie, setIsTestingRuijie] = useState(false);
+  const [showRuijiePassword, setShowRuijiePassword] = useState(false);
+  const [showRuijieHubModal, setShowRuijieHubModal] = useState(false);
+  const [ruijieHubInitialTab, setRuijieHubInitialTab] = useState<'sync' | 'import' | 'export' | 'template'>('sync');
+  const [isSyncingRuijie, setIsSyncingRuijie] = useState(false);
 
   const [fonnteTestResult, setFonnteTestResult] = useState<{ status: boolean; message?: string; device?: string; quota?: number } | null>(null);
   const [isTestingFonnte, setIsTestingFonnte] = useState(false);
@@ -212,6 +238,22 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
     setTimeout(() => setNotice(null), 4500);
   };
 
+  const handleSyncRuijieNow = async () => {
+    setIsSyncingRuijie(true);
+    try {
+      const res = await RuijieService.executeRuijieCloudSync('manual');
+      setNotice(res.message);
+      setRuijieConfig(DataService.getRuijieConfig());
+      onRefreshData();
+      setTimeout(() => setNotice(null), 5000);
+    } catch (e: any) {
+      setNotice(`Gagal sinkronisasi Ruijie: ${e?.message}`);
+      setTimeout(() => setNotice(null), 5000);
+    } finally {
+      setIsSyncingRuijie(false);
+    }
+  };
+
   const handleSaveDanaConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     DanaService.saveConfig(danaConfig);
@@ -228,6 +270,224 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
     setNotice(`Pengaturan WhatsApp Bot via Fonnte berhasil disimpan langsung ke Database (${syncRes.timestamp})!`);
     setSupabaseConfig(getStoredSupabaseConfig());
     setTimeout(() => setNotice(null), 4500);
+  };
+
+  // Default official templates for reset
+  const DEFAULT_REMINDER_TMPL = `Halo Kak *{{customer_name}}* ({{customer_code}}) 😊,
+Kami menginformasikan bahwa tagihan internet AnuwaniNet untuk periode *{{period}}* sebesar *{{bill_amount}}* telah terbit.
+
+Batas jatuh tempo: *{{due_date}}*.
+Paket Layanan: *{{package_name}}*
+
+Pembayaran praktis & otomatis via DANA & QRIS:
+👉 {{payment_link}}
+
+Rekening Bank Resmi AnuwaniNet:
+• BCA: 8291-039-112 a/n AnuwaniNet
+• BRI: 0021-01-082910-50-1 a/n AnuwaniNet
+
+Abaikan pesan ini apabila Kakak sudah melakukan pembayaran. Terima kasih banyak!`;
+
+  const DEFAULT_URGENT_TMPL = `🚨 *PERINGATAN PEMBAYARAN MENDESAK (URGENT PAYMENT)* 🚨
+*JARINGAN INTERNET ANUWANINET*
+--------------------------------------------------
+Yth. Pelanggan: *{{customer_name}}*
+ID Pelanggan: *{{customer_code}}*
+No. Tagihan: *{{bill_number}}*
+Periode: *{{period}}*
+Paket Layanan: *{{package_name}}*
+Batas Jatuh Tempo: *{{due_date}}*
+Status: *⚠️ OVERDUE (Terlambat {{days_overdue}} Hari)*
+TOTAL TUNGGAKAN: *{{bill_amount}}*
+--------------------------------------------------
+⚠️ *PEMBERITAHUAN ISOLIR OTOMATIS RUIJIE:*
+Tagihan internet Anda telah melewati batas waktu pembayaran. Router Ruijie Reyee akan *MENGISOLIR (MEMUTUS SEMENTARA)* akses internet jika pelunasan belum diselesaikan hari ini.
+
+💳 *BAYAR SEKARANG & BUKA ISOLIR CEPAT:*
+👉 {{payment_link}}
+*(Verifikasi otomatis 24 jam langsung memulihkan koneksi Wi-Fi Anda)*
+
+Transfer Bank Resmi:
+• BCA: 8291-039-112 a/n AnuwaniNet
+• BRI: 0021-01-082910-50-1 a/n AnuwaniNet
+
+Setelah transfer, konfirmasi via bot: *BAYAR {{bill_number}}*
+
+_Abaikan pemberitahuan ini jika Anda telah menyelesaikan pembayaran._`;
+
+  const handleInsertPlaceholder = (placeholder: string) => {
+    const textarea = templateTextareaRef.current;
+    if (!textarea) {
+      if (templateActiveTab === 'reminder') {
+        setWaBotConfig(prev => ({
+          ...prev,
+          reminderTemplate: (prev.reminderTemplate || DEFAULT_REMINDER_TMPL) + ' ' + placeholder
+        }));
+      } else if (templateActiveTab === 'urgent') {
+        setWaBotConfig(prev => ({
+          ...prev,
+          urgentNoticeTemplate: (prev.urgentNoticeTemplate || DEFAULT_URGENT_TMPL) + ' ' + placeholder
+        }));
+      } else if (templateActiveTab === 'receipt') {
+        setWaBotConfig(prev => ({
+          ...prev,
+          receiptTemplate: (prev.receiptTemplate || '') + ' ' + placeholder
+        }));
+      } else if (templateActiveTab === 'isolir') {
+        setWaBotConfig(prev => ({
+          ...prev,
+          isolirTemplate: (prev.isolirTemplate || '') + ' ' + placeholder
+        }));
+      }
+    } else {
+      const start = textarea.selectionStart || 0;
+      const end = textarea.selectionEnd || 0;
+      const currentVal = textarea.value;
+      const newVal = currentVal.substring(0, start) + placeholder + currentVal.substring(end);
+
+      if (templateActiveTab === 'reminder') {
+        setWaBotConfig(prev => ({ ...prev, reminderTemplate: newVal }));
+      } else if (templateActiveTab === 'urgent') {
+        setWaBotConfig(prev => ({ ...prev, urgentNoticeTemplate: newVal }));
+      } else if (templateActiveTab === 'receipt') {
+        setWaBotConfig(prev => ({ ...prev, receiptTemplate: newVal }));
+      } else if (templateActiveTab === 'isolir') {
+        setWaBotConfig(prev => ({ ...prev, isolirTemplate: newVal }));
+      }
+
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + placeholder.length, start + placeholder.length);
+      }, 50);
+    }
+
+    try {
+      navigator.clipboard.writeText(placeholder);
+      setCopiedPlaceholder(placeholder);
+      setTimeout(() => setCopiedPlaceholder(null), 2500);
+    } catch (err) {}
+  };
+
+  const handleSaveTemplates = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    DataService.saveWhatsAppBotConfig(waBotConfig);
+    const syncRes = await DataService.syncSystemSettingsToDatabase();
+    setTemplateNotice(`✅ Template WhatsApp berhasil disimpan & disinkronkan ke Database (${syncRes.timestamp})!`);
+    onRefreshData();
+    setTimeout(() => setTemplateNotice(null), 5000);
+  };
+
+  const handleResetActiveTemplateToDefault = () => {
+    if (templateActiveTab === 'reminder') {
+      setWaBotConfig(prev => ({ ...prev, reminderTemplate: DEFAULT_REMINDER_TMPL }));
+      setTemplateNotice('Template Pengingat Pembayaran (Payment Reminder) telah di-reset ke format default resmi.');
+    } else if (templateActiveTab === 'urgent') {
+      setWaBotConfig(prev => ({ ...prev, urgentNoticeTemplate: DEFAULT_URGENT_TMPL }));
+      setTemplateNotice('Template Peringatan Mendesak (Urgent Notice) telah di-reset ke format default resmi.');
+    } else if (templateActiveTab === 'receipt') {
+      setWaBotConfig(prev => ({ ...prev, receiptTemplate: 'Halo {{customer_name}}, pembayaran tagihan {{bill_number}} sebesar {{bill_amount}} telah LUNAS terverifikasi. Terima kasih!' }));
+      setTemplateNotice('Template Kuitansi telah di-reset ke format default.');
+    } else if (templateActiveTab === 'isolir') {
+      setWaBotConfig(prev => ({ ...prev, isolirTemplate: 'Pemberitahuan Isolir: Layanan internet AnuwaniNet ID {{customer_code}} telah dialihkan sementara karena tunggakan tagihan {{bill_amount}}.' }));
+      setTemplateNotice('Template Isolir telah di-reset ke format default.');
+    }
+    setTimeout(() => setTemplateNotice(null), 4000);
+  };
+
+  // Sample Data for Real-Time WhatsApp Live Simulation
+  const sampleCustNormal: Customer = {
+    id: 'sample-norm',
+    customerCode: 'ANW-1082',
+    name: 'Budi Santoso',
+    phone: previewTestPhone || '085711223344',
+    address: 'Perum Grand Anuwani Blok B2 No. 14, Tangerang',
+    email: 'budi.santoso@example.com',
+    pppoeUsername: 'budi_santoso',
+    pppoePassword: 'pass_budi_01',
+    ipAddress: '192.168.10.25',
+    macAddress: 'BC:24:11:8A:92:01',
+    packageId: 'pkg-2',
+    packageName: 'Paket Keluarga Ultra 20 Mbps',
+    packagePrice: 165000,
+    status: 'active',
+    autoIsolirEnabled: true,
+    billingDay: 20,
+    joinDate: '2026-01-15',
+    ruijieDeviceId: 'dev-gw-01'
+  };
+
+  const sampleCustOverdue: Customer = {
+    id: 'sample-od',
+    customerCode: 'ANW-2041',
+    name: 'Ahmad Fauzi',
+    phone: previewTestPhone || '081299887766',
+    address: 'Jl. Melati Raya No. 45 RT 03/07, Jakarta Barat',
+    email: 'ahmad.fauzi@example.com',
+    pppoeUsername: 'ahmad_fauzi',
+    pppoePassword: 'pass_ahmad_02',
+    ipAddress: '192.168.10.44',
+    macAddress: 'BC:24:11:8A:92:02',
+    packageId: 'pkg-3',
+    packageName: 'Paket Bisnis Cepat 50 Mbps',
+    packagePrice: 325000,
+    status: 'isolated',
+    autoIsolirEnabled: true,
+    billingDay: 15,
+    joinDate: '2025-11-10',
+    ruijieDeviceId: 'dev-gw-01'
+  };
+
+  const activeSampleCustomer = previewCustomerScenario === 'overdue' ? sampleCustOverdue : sampleCustNormal;
+  const activeSampleBill: Bill = {
+    id: 'bill-preview-01',
+    billNumber: previewCustomerScenario === 'overdue' ? 'INV-202610-042' : 'INV-202610-088',
+    customerId: activeSampleCustomer.id,
+    customerName: activeSampleCustomer.name,
+    customerPhone: activeSampleCustomer.phone,
+    packageId: activeSampleCustomer.packageId,
+    packageName: activeSampleCustomer.packageName,
+    amount: activeSampleCustomer.packagePrice,
+    period: 'Oktober 2026',
+    dueDate: previewCustomerScenario === 'overdue' ? '2026-10-15' : '2026-10-20',
+    status: previewCustomerScenario === 'overdue' ? 'overdue' : 'unpaid'
+  };
+
+  // Current active template content
+  const currentTemplateText =
+    templateActiveTab === 'reminder'
+      ? (waBotConfig.reminderTemplate || DEFAULT_REMINDER_TMPL)
+      : templateActiveTab === 'urgent'
+      ? (waBotConfig.urgentNoticeTemplate || DEFAULT_URGENT_TMPL)
+      : templateActiveTab === 'receipt'
+      ? waBotConfig.receiptTemplate
+      : waBotConfig.isolirTemplate;
+
+  // Live evaluated preview text
+  const evaluatedPreviewText = WhatsAppService.renderTemplate(currentTemplateText, {
+    customer: activeSampleCustomer,
+    bill: activeSampleBill,
+    daysOverdue: previewCustomerScenario === 'overdue' ? 3 : 0
+  });
+
+  const handleSendTemplateTestWeb = () => {
+    const phone = previewTestPhone || activeSampleCustomer.phone;
+    WhatsAppService.openWhatsAppUrl(phone, evaluatedPreviewText);
+  };
+
+  const handleSendTemplateTestFonnte = async () => {
+    if (!previewTestPhone) {
+      alert('Masukkan nomor WhatsApp tujuan terlebih dahulu.');
+      return;
+    }
+    setIsSendingPreviewTest(true);
+    const res = await FonnteService.sendMessage(previewTestPhone, evaluatedPreviewText, waBotConfig.fonnteToken);
+    setIsSendingPreviewTest(false);
+    if (res.status) {
+      setTemplateNotice(`✅ Pesan uji coba berhasil dikirim via Fonnte Gateway ke ${previewTestPhone}!`);
+    } else {
+      setTemplateNotice(`⚠️ Status Fonnte: ${res.message}. Anda juga dapat mengklik 'Kirim via WhatsApp Web'.`);
+    }
+    setTimeout(() => setTemplateNotice(null), 6000);
   };
 
   // Dedicated Save All Settings to Database handler
@@ -507,11 +767,11 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
         </div>
       )}
 
-      {/* 6-Tab Section Selector including dedicated Pencadangan Database section */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 p-1.5 rounded-xl bg-zinc-900 border border-zinc-800">
+      {/* 7-Tab Section Selector: Smooth horizontal scroll on mobile & grid on desktop */}
+      <div className="flex items-center gap-1.5 overflow-x-auto p-1.5 rounded-xl bg-zinc-900 border border-zinc-800 lg:grid lg:grid-cols-7 scrollbar-none">
         <button
           onClick={() => setActiveSection('app')}
-          className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+          className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shrink-0 lg:shrink ${
             activeSection === 'app'
               ? 'bg-red-600 text-white shadow-md shadow-red-950 font-bold'
               : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
@@ -523,7 +783,7 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
 
         <button
           onClick={() => setActiveSection('backup')}
-          className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 relative ${
+          className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 relative shrink-0 lg:shrink ${
             activeSection === 'backup'
               ? 'bg-red-600 text-white shadow-md shadow-red-950 font-bold'
               : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
@@ -538,7 +798,7 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
 
         <button
           onClick={() => setActiveSection('ruijie')}
-          className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+          className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shrink-0 lg:shrink ${
             activeSection === 'ruijie'
               ? 'bg-red-600 text-white shadow-md shadow-red-950 font-bold'
               : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
@@ -550,19 +810,19 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
 
         <button
           onClick={() => setActiveSection('dana')}
-          className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+          className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shrink-0 lg:shrink ${
             activeSection === 'dana'
               ? 'bg-sky-600 text-white shadow-md shadow-sky-950 font-bold'
               : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
           }`}
         >
           <CreditCard className="w-4 h-4 shrink-0 text-sky-400" />
-          <span>DANA Gateways</span>
+          <span>DANA Gateway</span>
         </button>
 
         <button
           onClick={() => setActiveSection('whatsapp')}
-          className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+          className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shrink-0 lg:shrink ${
             activeSection === 'whatsapp'
               ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950 font-bold'
               : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
@@ -573,8 +833,23 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
         </button>
 
         <button
+          onClick={() => setActiveSection('templates')}
+          className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 relative shrink-0 lg:shrink ${
+            activeSection === 'templates'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950 font-bold'
+              : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+          }`}
+        >
+          <MessageSquare className="w-4 h-4 shrink-0 text-emerald-400" />
+          <span className="flex items-center gap-1">
+            <span>Template WA</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveSection('tutorial')}
-          className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 col-span-2 sm:col-span-1 ${
+          className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shrink-0 lg:shrink ${
             activeSection === 'tutorial'
               ? 'bg-amber-600 text-white shadow-md shadow-amber-950 font-bold'
               : 'text-amber-400/90 hover:text-amber-300 hover:bg-amber-950/40 border border-amber-900/40'
@@ -1837,178 +2112,431 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
           SECTION 2: PENGATURAN RUIJIE REYEE & AUTO-ISOLIR
       ============================================================ */}
       {activeSection === 'ruijie' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Aturan Auto-Isolir */}
-          <div className="p-5 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-4">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-red-500" />
-              <span>Aturan Auto-Isolir Gateway Ruijie Reyee</span>
-            </h3>
-
-            <form onSubmit={handleSaveRuijieConfig} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-zinc-400 mb-1">Tanggal Jatuh Tempo Bulanan</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="1"
-                    max="28"
-                    value={ruijieConfig.autoIsolirDay}
-                    onChange={e => setRuijieConfig({ ...ruijieConfig, autoIsolirDay: parseInt(e.target.value) || 20 })}
-                    className="w-24 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono focus:border-red-600 focus:outline-none"
-                  />
-                  <span className="text-zinc-400">setiap bulan (default tanggal 20)</span>
+        <div className="space-y-6">
+          {/* Section Banner Header with Direct Action Buttons */}
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-red-950/60 via-zinc-900 to-zinc-900 border border-red-900/60 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-red-900/50 text-red-400 border border-red-800">
+                  <Router className="w-5 h-5" />
                 </div>
+                <h3 className="text-base font-bold text-white">
+                  Ruijie Reyee Cloud Management, Auto-Sync & Hub Data
+                </h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-red-950 text-red-400 border border-red-800">
+                  Reyee Cloud API
+                </span>
               </div>
+              <p className="text-xs text-zinc-400 max-w-2xl leading-relaxed">
+                Kelola kredensial Ruijie Reyee Cloud, jadwal auto-sinkronisasi dua arah, aturan auto-isolir tagihan jatuh tempo, serta ekspor & impor akun pelanggan PPPoE dan pool voucher hotspot.
+              </p>
+            </div>
 
-              <div>
-                <label className="block text-zinc-400 mb-1">Masa Tenggang / Grace Period</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="0"
-                    max="10"
-                    value={ruijieConfig.gracePeriodDays}
-                    onChange={e => setRuijieConfig({ ...ruijieConfig, gracePeriodDays: parseInt(e.target.value) || 2 })}
-                    className="w-24 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono focus:border-red-600 focus:outline-none"
-                  />
-                  <span className="text-zinc-400">hari (Isolir dieksekusi tgl {ruijieConfig.autoIsolirDay + ruijieConfig.gracePeriodDays})</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-zinc-400 mb-1">Profil PPPoE Isolir Ruijie</label>
-                <input
-                  type="text"
-                  value={ruijieConfig.isolirProfileName}
-                  onChange={e => setRuijieConfig({ ...ruijieConfig, isolirProfileName: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono focus:border-red-600 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-zinc-400 mb-1">Profil PPPoE Normal (Default)</label>
-                <input
-                  type="text"
-                  value={ruijieConfig.normalProfileName}
-                  onChange={e => setRuijieConfig({ ...ruijieConfig, normalProfileName: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono focus:border-red-600 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="autoIsolirActiveCheck"
-                  checked={ruijieConfig.autoIsolirActive}
-                  onChange={e => setRuijieConfig({ ...ruijieConfig, autoIsolirActive: e.target.checked })}
-                  className="w-4 h-4 rounded text-red-600 bg-zinc-950 border-zinc-800"
-                />
-                <label htmlFor="autoIsolirActiveCheck" className="text-zinc-300 select-none">
-                  Aktifkan daemon auto-isolir otomatis
-                </label>
-              </div>
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <button
+                type="button"
+                onClick={handleSyncRuijieNow}
+                disabled={isSyncingRuijie}
+                className="px-3.5 py-2 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-500 text-white transition-all shadow-md shadow-red-950 flex items-center gap-1.5 cursor-pointer"
+                title="Jalankan sinkronisasi dua arah dengan Ruijie Reyee Cloud sekarang"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingRuijie ? 'animate-spin' : ''}`} />
+                <span>{isSyncingRuijie ? 'Menyinkronkan...' : '⚡ Sinkronkan Sekarang'}</span>
+              </button>
 
               <button
-                type="submit"
-                className="w-full py-2.5 rounded-lg bg-red-600 text-white font-bold hover:bg-red-500 transition-colors shadow-sm"
+                type="button"
+                onClick={() => {
+                  setRuijieHubInitialTab('import');
+                  setShowRuijieHubModal(true);
+                }}
+                className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-200 hover:text-white hover:border-zinc-500 transition-colors flex items-center gap-1.5 cursor-pointer"
+                title="Tarik data pelanggan dari Ruijie Gateway atau unggah file CSV/JSON"
               >
-                Simpan Aturan Isolir
+                <Download className="w-3.5 h-3.5 text-sky-400" />
+                <span>Tarik / Import Data</span>
               </button>
-            </form>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setRuijieHubInitialTab('export');
+                  setShowRuijieHubModal(true);
+                }}
+                className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-200 hover:text-white hover:border-zinc-500 transition-colors flex items-center gap-1.5 cursor-pointer"
+                title="Kirim akun PPPoE dan voucher ke Ruijie Cloud atau unduh berkas CSV"
+              >
+                <Send className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Kirim / Export Data</span>
+              </button>
+            </div>
           </div>
 
-          {/* Kredensial Ruijie Cloud API */}
-          <div className="p-5 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-4 text-xs">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Key className="w-4 h-4 text-red-500" />
-              <span>Kredensial Ruijie Reyee Cloud API (App ID & Secret Key)</span>
-            </h3>
-
-            <form onSubmit={handleSaveRuijieConfig} className="space-y-3">
-              <div>
-                <label className="block text-zinc-400 mb-1">
-                  Ruijie App ID <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: rj_app_anuwani_882910398"
-                  value={ruijieConfig.appId || ruijieConfig.apiKey || ''}
-                  onChange={e => setRuijieConfig({
-                    ...ruijieConfig,
-                    appId: e.target.value,
-                    apiKey: e.target.value
-                  })}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px] focus:border-red-600 focus:outline-none"
-                />
-                <span className="text-[10px] text-zinc-500">App ID yang diterbitkan oleh Ruijie Cloud Platform</span>
+          {/* Hero Card: Auto-Sinkronisasi Terjadwal dengan Ruijie Cloud */}
+          <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <RefreshCw className="w-5 h-5 text-red-500" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-white">
+                      Auto-Sinkronisasi Terjadwal dengan Ruijie Cloud
+                    </h3>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-900 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      AKTIF BERKALA
+                    </span>
+                  </div>
+                  <p className="text-zinc-400 text-[11px]">
+                    Sistem otomatis memperbarui client PPPoE, router gateway online, dan pool voucher hotspot secara periodik.
+                  </p>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-zinc-400 mb-1">
-                  Ruijie Secret Key <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Contoh: rj_sec_778120392819039129x88a"
-                  value={ruijieConfig.secretKey || ruijieConfig.apiSecret || ''}
-                  onChange={e => setRuijieConfig({
-                    ...ruijieConfig,
-                    secretKey: e.target.value,
-                    apiSecret: e.target.value
-                  })}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px] focus:border-red-600 focus:outline-none"
-                />
-                <span className="text-[10px] text-zinc-500">Secret Key API untuk enkripsi HMAC otorisasi Cloud</span>
-              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="autoSyncEnabledSectionCheck"
+                    checked={ruijieConfig.autoSyncEnabled !== false}
+                    onChange={e => {
+                      const updated = { ...ruijieConfig, autoSyncEnabled: e.target.checked };
+                      setRuijieConfig(updated);
+                      DataService.saveRuijieConfig(updated);
+                    }}
+                    className="w-4 h-4 rounded text-red-600 bg-zinc-950 border-zinc-700"
+                  />
+                  <label htmlFor="autoSyncEnabledSectionCheck" className="text-xs text-zinc-200 font-semibold cursor-pointer select-none">
+                    Aktifkan Daemon Auto-Sync
+                  </label>
+                </div>
 
-              <div>
-                <label className="block text-zinc-400 mb-1">Cloud Open API URL</label>
-                <input
-                  type="text"
-                  value={ruijieConfig.cloudUrl}
-                  onChange={e => setRuijieConfig({ ...ruijieConfig, cloudUrl: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px] focus:border-red-600 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-zinc-400 mb-1">Site ID</label>
-                <input
-                  type="text"
-                  value={ruijieConfig.siteId}
-                  onChange={e => setRuijieConfig({ ...ruijieConfig, siteId: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px] focus:border-red-600 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="submit"
-                  className="flex-1 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-500 transition-colors shadow-sm"
-                >
-                  Simpan App ID & Secret Key
-                </button>
                 <button
                   type="button"
-                  onClick={handleTestRuijie}
-                  disabled={isTestingRuijie}
-                  className="px-3.5 py-2 rounded-lg bg-zinc-800 text-white font-semibold hover:bg-zinc-700 transition-colors"
+                  onClick={() => {
+                    setRuijieHubInitialTab('sync');
+                    setShowRuijieHubModal(true);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700 flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  {isTestingRuijie ? 'Mengetes...' : 'Test Handshake Cloud'}
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Detail & Hub Cloud</span>
                 </button>
               </div>
-            </form>
+            </div>
 
-            {ruijieTestResult && (
-              <div className={`p-2.5 rounded-lg text-[11px] ${
-                ruijieTestResult.success ? 'bg-emerald-950/60 border border-emerald-800 text-emerald-300' : 'bg-red-950/60 border border-red-800 text-red-300'
-              }`}>
-                {ruijieTestResult.message} {ruijieTestResult.latency ? `(${ruijieTestResult.latency} ms)` : ''}
+            {/* Metrik & Status Terakhir Sinkronisasi */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+              <div className="md:col-span-6 p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-zinc-400 font-medium">Timestamp Sinkronisasi Terakhir:</span>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-900">
+                    SUKSES
+                  </span>
+                </div>
+                <div className="text-xl sm:text-2xl font-mono font-extrabold text-white text-emerald-400">
+                  {ruijieConfig.lastSuccessfulSyncAt || ruijieConfig.lastSyncAt || '15 Okt 2026, 10:30 WIB'}
+                </div>
+                <div className="text-[11px] text-zinc-400 flex items-center gap-2 pt-1">
+                  <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>Interval Waktu: <strong className="text-zinc-200">{ruijieConfig.autoSyncIntervalMinutes || 30} Menit per Siklus</strong></span>
+                </div>
               </div>
-            )}
+
+              <div className="md:col-span-6 grid grid-cols-3 gap-2.5">
+                <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 flex flex-col justify-between">
+                  <span className="text-zinc-500 text-[10px] font-semibold uppercase">Akun PPPoE</span>
+                  <span className="text-lg font-mono font-bold text-white mt-1">
+                    {DataService.getCustomers().length} User
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-mono">Tersinkronisasi</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 flex flex-col justify-between">
+                  <span className="text-zinc-500 text-[10px] font-semibold uppercase">Gateway Online</span>
+                  <span className="text-lg font-mono font-bold text-white mt-1">
+                    {DataService.getRuijieDevices().length} Unit
+                  </span>
+                  <span className="text-[10px] text-sky-400 font-mono">RG-EG3250</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 flex flex-col justify-between">
+                  <span className="text-zinc-500 text-[10px] font-semibold uppercase">Voucher Hotspot</span>
+                  <span className="text-lg font-mono font-bold text-white mt-1">
+                    {DataService.getVouchers().length} Pool
+                  </span>
+                  <span className="text-[10px] text-amber-400 font-mono">Radius Sync</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Interval Preset Selector */}
+            <div className="pt-2 border-t border-zinc-800/70 space-y-2">
+              <label className="block text-zinc-400 text-xs font-medium">
+                Pilih Frekuensi Interval Auto-Sinkronisasi:
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
+                {[
+                  { mins: 15, label: '15 Menit', freq: 'every_15_mins', desc: 'Realtime' },
+                  { mins: 30, label: '30 Menit', freq: 'every_30_mins', desc: 'Rekomendasi' },
+                  { mins: 60, label: '1 Jam', freq: 'hourly', desc: 'Standar' },
+                  { mins: 360, label: '6 Jam', freq: 'every_6_hours', desc: '4x Sehari' },
+                  { mins: 720, label: '12 Jam', freq: 'every_12_hours', desc: '2x Sehari' },
+                  { mins: 1440, label: '24 Jam', freq: 'daily', desc: 'Harian' }
+                ].map(item => {
+                  const isSelected = ruijieConfig.autoSyncIntervalMinutes === item.mins;
+                  return (
+                    <button
+                      key={item.mins}
+                      type="button"
+                      onClick={() => {
+                        const updated = {
+                          ...ruijieConfig,
+                          autoSyncIntervalMinutes: item.mins,
+                          autoSyncFrequency: item.freq as any
+                        };
+                        setRuijieConfig(updated);
+                        DataService.saveRuijieConfig(updated);
+                        setNotice(`Interval auto-sync Ruijie Cloud disetel ke ${item.label}!`);
+                        setTimeout(() => setNotice(null), 3000);
+                      }}
+                      className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-red-950/60 border-red-600 text-white shadow-md'
+                          : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-white'
+                      }`}
+                    >
+                      <div className="font-mono font-bold text-xs">{item.label}</div>
+                      <div className="text-[10px] text-zinc-500 mt-0.5">{item.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Aturan Auto-Isolir */}
+            <div className="p-5 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-red-500" />
+                <span>Aturan Auto-Isolir Gateway Ruijie Reyee</span>
+              </h3>
+
+              <form onSubmit={handleSaveRuijieConfig} className="space-y-3.5 text-xs">
+                <div>
+                  <label className="block text-zinc-400 mb-1">Tanggal Jatuh Tempo Bulanan</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max="28"
+                      value={ruijieConfig.autoIsolirDay}
+                      onChange={e => setRuijieConfig({ ...ruijieConfig, autoIsolirDay: parseInt(e.target.value) || 20 })}
+                      className="w-24 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono focus:border-red-600 focus:outline-none"
+                    />
+                    <span className="text-zinc-400">setiap bulan (default tanggal 20)</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1">Masa Tenggang / Grace Period</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      value={ruijieConfig.gracePeriodDays}
+                      onChange={e => setRuijieConfig({ ...ruijieConfig, gracePeriodDays: parseInt(e.target.value) || 2 })}
+                      className="w-24 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono focus:border-red-600 focus:outline-none"
+                    />
+                    <span className="text-zinc-400">hari (Isolir dieksekusi tgl {ruijieConfig.autoIsolirDay + ruijieConfig.gracePeriodDays})</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1">Profil PPPoE Isolir Ruijie</label>
+                  <input
+                    type="text"
+                    value={ruijieConfig.isolirProfileName}
+                    onChange={e => setRuijieConfig({ ...ruijieConfig, isolirProfileName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono focus:border-red-600 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1">Profil PPPoE Normal (Default)</label>
+                  <input
+                    type="text"
+                    value={ruijieConfig.normalProfileName}
+                    onChange={e => setRuijieConfig({ ...ruijieConfig, normalProfileName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono focus:border-red-600 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="autoIsolirActiveCheck"
+                    checked={ruijieConfig.autoIsolirActive}
+                    onChange={e => setRuijieConfig({ ...ruijieConfig, autoIsolirActive: e.target.checked })}
+                    className="w-4 h-4 rounded text-red-600 bg-zinc-950 border-zinc-800"
+                  />
+                  <label htmlFor="autoIsolirActiveCheck" className="text-zinc-300 select-none">
+                    Aktifkan daemon auto-isolir otomatis
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-lg bg-red-600 text-white font-bold hover:bg-red-500 transition-colors shadow-sm"
+                >
+                  Simpan Aturan Isolir
+                </button>
+              </form>
+            </div>
+
+            {/* Kredensial Ruijie Cloud API */}
+            <div className="p-5 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-4 text-xs">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Key className="w-4 h-4 text-red-500" />
+                <span>Kredensial Ruijie Reyee Cloud API (App ID & Secret Key)</span>
+              </h3>
+
+              <form onSubmit={handleSaveRuijieConfig} className="space-y-3">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">
+                    Ruijie App ID <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: rj_app_anuwani_882910398"
+                    value={ruijieConfig.appId || ruijieConfig.apiKey || ''}
+                    onChange={e => setRuijieConfig({
+                      ...ruijieConfig,
+                      appId: e.target.value,
+                      apiKey: e.target.value
+                    })}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px] focus:border-red-600 focus:outline-none"
+                  />
+                  <span className="text-[10px] text-zinc-500">App ID yang diterbitkan oleh Ruijie Cloud Platform</span>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">
+                    Ruijie Secret Key <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Contoh: rj_sec_778120392819039129x88a"
+                    value={ruijieConfig.secretKey || ruijieConfig.apiSecret || ''}
+                    onChange={e => setRuijieConfig({
+                      ...ruijieConfig,
+                      secretKey: e.target.value,
+                      apiSecret: e.target.value
+                    })}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px] focus:border-red-600 focus:outline-none"
+                  />
+                  <span className="text-[10px] text-zinc-500">Secret Key API untuk enkripsi HMAC otorisasi Cloud</span>
+                </div>
+
+                {/* Form Username dan Password Ruijie Reyee Cloud */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-zinc-800/60 mt-1">
+                  <div>
+                    <label className="block text-zinc-400 mb-1 flex items-center gap-1.5 font-medium">
+                      <User className="w-3.5 h-3.5 text-red-400" />
+                      <span>Username Ruijie Cloud</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: noc.admin@anuwani.net"
+                      value={ruijieConfig.username || ''}
+                      onChange={e => setRuijieConfig({
+                        ...ruijieConfig,
+                        username: e.target.value
+                      })}
+                      className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px] focus:border-red-600 focus:outline-none"
+                    />
+                    <span className="text-[10px] text-zinc-500">Username atau email login akun Ruijie Reyee Cloud</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-400 mb-1 flex items-center gap-1.5 font-medium">
+                      <Lock className="w-3.5 h-3.5 text-red-400" />
+                      <span>Password Ruijie Cloud</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showRuijiePassword ? 'text' : 'password'}
+                        placeholder="Masukkan password akun Ruijie Cloud"
+                        value={ruijieConfig.password || ''}
+                        onChange={e => setRuijieConfig({
+                          ...ruijieConfig,
+                          password: e.target.value
+                        })}
+                        className="w-full px-3 py-2 pr-9 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px] focus:border-red-600 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowRuijiePassword(!showRuijiePassword)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer p-0.5"
+                        title={showRuijiePassword ? 'Sembunyikan password' : 'Lihat password'}
+                      >
+                        {showRuijiePassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    <span className="text-[10px] text-zinc-500">Kata sandi akun pengelola Ruijie Reyee Cloud</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">Cloud Open API URL</label>
+                  <input
+                    type="text"
+                    value={ruijieConfig.cloudUrl}
+                    onChange={e => setRuijieConfig({ ...ruijieConfig, cloudUrl: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px] focus:border-red-600 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-medium">Site ID</label>
+                  <input
+                    type="text"
+                    value={ruijieConfig.siteId}
+                    onChange={e => setRuijieConfig({ ...ruijieConfig, siteId: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px] focus:border-red-600 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-500 transition-colors shadow-sm"
+                  >
+                    Simpan Kredensial Ruijie Cloud
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTestRuijie}
+                    disabled={isTestingRuijie}
+                    className="px-3.5 py-2 rounded-lg bg-zinc-800 text-white font-semibold hover:bg-zinc-700 transition-colors"
+                  >
+                    {isTestingRuijie ? 'Mengetes...' : 'Test Handshake Cloud'}
+                  </button>
+                </div>
+              </form>
+
+              {ruijieTestResult && (
+                <div className={`p-2.5 rounded-lg text-[11px] ${
+                  ruijieTestResult.success ? 'bg-emerald-950/60 border border-emerald-800 text-emerald-300' : 'bg-red-950/60 border border-red-800 text-red-300'
+                }`}>
+                  {ruijieTestResult.message} {ruijieTestResult.latency ? `(${ruijieTestResult.latency} ms)` : ''}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -2221,11 +2749,11 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
                   <label className="text-zinc-400">Template Tagihan Bulanan (Default Bot)</label>
                   <button
                     type="button"
-                    onClick={() => setShowTemplateManager(true)}
-                    className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1 font-semibold"
+                    onClick={() => setActiveSection('templates')}
+                    className="text-[11px] text-emerald-400 hover:text-emerald-300 hover:underline flex items-center gap-1 font-semibold"
                   >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>Kelola Semua Template & Placeholder →</span>
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Kustomisasi di Bagian Template WA →</span>
                   </button>
                 </div>
                 <textarea
@@ -2353,7 +2881,444 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
       )}
 
       {/* ============================================================
-          SECTION 5: TUTORIAL & PANDUAN DEPLOYMENT HOSTING
+          SECTION 5: WHATSAPP MESSAGE TEMPLATES (KUSTOMISASI PESAN)
+      ============================================================ */}
+      {activeSection === 'templates' && (
+        <div className="space-y-6">
+          {/* Section Banner Header */}
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/60 via-zinc-900 to-zinc-900 border border-emerald-900/60 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-900/50 text-emerald-400 border border-emerald-800">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <h3 className="text-base font-bold text-white">
+                  WhatsApp Message Templates (Kustomisasi Pesan Tagihan)
+                </h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-800">
+                  Live Sync
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 max-w-2xl leading-relaxed">
+                Sesuaikan isi template pesan WhatsApp otomatis untuk <strong>Payment Reminders</strong> (pengingat tagihan) dan <strong>Urgent Notices</strong> (peringatan mendesak overdue). Gunakan placeholder dinamis seperti <code className="text-emerald-300 font-mono">{"{{customer_name}}"}</code>, <code className="text-emerald-300 font-mono">{"{{bill_amount}}"}</code>, dan <code className="text-emerald-300 font-mono">{"{{due_date}}"}</code> yang akan diganti otomatis saat pesan dikirimkan.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowTemplateManager(true)}
+                className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-200 hover:text-white hover:border-zinc-500 transition-colors flex items-center gap-1.5"
+                title="Buka pustaka semua template kustom"
+              >
+                <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Pustaka Template</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveTemplates}
+                className="px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 transition-all shadow-md shadow-emerald-950 flex items-center gap-1.5"
+              >
+                <Check className="w-4 h-4" />
+                <span>Simpan Template</span>
+              </button>
+            </div>
+          </div>
+
+          {templateNotice && (
+            <div className="p-3.5 rounded-xl bg-emerald-950/80 border border-emerald-800 text-xs text-emerald-200 flex items-center justify-between gap-2 animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{templateNotice}</span>
+              </div>
+              <button
+                onClick={() => setTemplateNotice(null)}
+                className="text-emerald-400 hover:text-white p-1 rounded"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Sub-Tabs: Pilih Template yang ingin dikustomisasi */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-1.5 rounded-xl bg-zinc-900 border border-zinc-800">
+            <button
+              onClick={() => setTemplateActiveTab('reminder')}
+              className={`p-3 rounded-lg text-left transition-all relative ${
+                templateActiveTab === 'reminder'
+                  ? 'bg-zinc-800 border border-emerald-500/50 shadow-sm'
+                  : 'hover:bg-zinc-800/50 border border-transparent'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-1.5 font-bold text-xs text-white">
+                  <BellRing className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Pengingat Pembayaran</span>
+                </div>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">
+                  Reminder
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400 line-clamp-1">
+                Notifikasi tagihan baru & pengingat ramah sebelum jatuh tempo
+              </p>
+            </button>
+
+            <button
+              onClick={() => setTemplateActiveTab('urgent')}
+              className={`p-3 rounded-lg text-left transition-all relative ${
+                templateActiveTab === 'urgent'
+                  ? 'bg-zinc-800 border border-red-500/50 shadow-sm'
+                  : 'hover:bg-zinc-800/50 border border-transparent'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-1.5 font-bold text-xs text-white">
+                  <ShieldAlert className="w-3.5 h-3.5 text-red-500" />
+                  <span>Pemberitahuan Mendesak</span>
+                </div>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-red-950 text-red-400 border border-red-800 font-mono">
+                  Urgent
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400 line-clamp-1">
+                Peringatan keras tagihan overdue & ancaman isolir Ruijie
+              </p>
+            </button>
+
+            <button
+              onClick={() => setTemplateActiveTab('receipt')}
+              className={`p-3 rounded-lg text-left transition-all relative ${
+                templateActiveTab === 'receipt'
+                  ? 'bg-zinc-800 border border-sky-500/50 shadow-sm'
+                  : 'hover:bg-zinc-800/50 border border-transparent'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-1.5 font-bold text-xs text-white">
+                  <Receipt className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Kuitansi Pembayaran</span>
+                </div>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-sky-950 text-sky-400 border border-sky-800 font-mono">
+                  Receipt
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400 line-clamp-1">
+                Bukti pelunasan sah setelah diverifikasi kasir / DANA
+              </p>
+            </button>
+
+            <button
+              onClick={() => setTemplateActiveTab('isolir')}
+              className={`p-3 rounded-lg text-left transition-all relative ${
+                templateActiveTab === 'isolir'
+                  ? 'bg-zinc-800 border border-amber-500/50 shadow-sm'
+                  : 'hover:bg-zinc-800/50 border border-transparent'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-1.5 font-bold text-xs text-white">
+                  <Server className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Notifikasi Isolir</span>
+                </div>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-950 text-amber-400 border border-amber-800 font-mono">
+                  Isolir
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400 line-clamp-1">
+                Pemberitahuan pemutusan sementara oleh router Ruijie
+              </p>
+            </button>
+          </div>
+
+          {/* Interactive Placeholder Chips Bar */}
+          <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Placeholder Tersedia (Klik untuk Menyisipkan & Menyalin):
+                </h4>
+              </div>
+              <span className="text-[11px] text-zinc-400">
+                {copiedPlaceholder ? (
+                  <span className="text-emerald-400 font-semibold animate-pulse">
+                    ✓ Disisipkan & Tersalin: <code className="font-mono">{copiedPlaceholder}</code>
+                  </span>
+                ) : (
+                  'Klik tag di bawah untuk menempelkannya langsung ke posisi kursor'
+                )}
+              </span>
+            </div>
+
+            {/* Primary placeholders requested by user */}
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span>Placeholder Utama:</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { tag: '{{customer_name}}', label: 'Nama Pelanggan', desc: 'Contoh: Budi Santoso' },
+                  { tag: '{{bill_amount}}', label: 'Nominal Tagihan', desc: 'Contoh: Rp 165.000' },
+                  { tag: '{{due_date}}', label: 'Tanggal Jatuh Tempo', desc: 'Contoh: 2026-10-20' },
+                  { tag: '{{customer_code}}', label: 'ID Pelanggan', desc: 'Contoh: ANW-1082' },
+                  { tag: '{{bill_number}}', label: 'No. Tagihan / Invoice', desc: 'Contoh: INV-202610-088' },
+                  { tag: '{{period}}', label: 'Periode Tagihan', desc: 'Contoh: Oktober 2026' },
+                  { tag: '{{package_name}}', label: 'Nama Paket', desc: 'Contoh: Paket Keluarga 20 Mbps' },
+                  { tag: '{{payment_link}}', label: 'Link Bayar DANA & QRIS', desc: 'Link verifikasi otomatis' },
+                  { tag: '{{days_overdue}}', label: 'Hari Overdue', desc: 'Contoh: 3' },
+                  { tag: '{{customer_phone}}', label: 'Nomor WhatsApp', desc: 'Nomor HP pelanggan' },
+                  { tag: '{{isolir_date}}', label: 'Tanggal Isolir', desc: 'Jadwal putus otomatis' }
+                ].map(item => (
+                  <button
+                    key={item.tag}
+                    type="button"
+                    onClick={() => handleInsertPlaceholder(item.tag)}
+                    title={`${item.label} (${item.desc})`}
+                    className="group px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 hover:border-emerald-600 hover:bg-emerald-950/40 text-left transition-all flex items-center gap-1.5"
+                  >
+                    <code className="text-xs font-mono font-bold text-emerald-400 group-hover:text-emerald-300">
+                      {item.tag}
+                    </code>
+                    <span className="text-[10px] text-zinc-400 group-hover:text-zinc-200">
+                      ({item.label})
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Split Screen: Left Textarea Editor, Right WhatsApp Simulator */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* LEFT: Template Editor */}
+            <div className="lg:col-span-7 p-5 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-emerald-400" />
+                  <h4 className="text-sm font-bold text-white">
+                    {templateActiveTab === 'reminder' && 'Editor Template: Pengingat Pembayaran (Payment Reminder)'}
+                    {templateActiveTab === 'urgent' && 'Editor Template: Peringatan Mendesak (Urgent Notice)'}
+                    {templateActiveTab === 'receipt' && 'Editor Template: Kuitansi Lunas (Payment Receipt)'}
+                    {templateActiveTab === 'isolir' && 'Editor Template: Notifikasi Isolir (Isolir Alert)'}
+                  </h4>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleResetActiveTemplateToDefault}
+                    className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors flex items-center gap-1"
+                    title="Kembalikan format teks ini ke standar resmi AnuwaniNet"
+                  >
+                    <RotateCcw className="w-3 h-3 text-amber-400" />
+                    <span>Reset Default</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(currentTemplateText);
+                      setTemplateNotice('Isi template berhasil disalin ke clipboard!');
+                      setTimeout(() => setTemplateNotice(null), 3000);
+                    }}
+                    className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors flex items-center gap-1"
+                  >
+                    <Copy className="w-3 h-3 text-zinc-400" />
+                    <span>Salin</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Textarea */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                  <span>Isi Konten Pesan WhatsApp:</span>
+                  <span>{currentTemplateText.length} karakter • {currentTemplateText.split('\n').length} baris</span>
+                </div>
+                <textarea
+                  ref={templateTextareaRef}
+                  rows={14}
+                  value={
+                    templateActiveTab === 'reminder'
+                      ? (waBotConfig.reminderTemplate || DEFAULT_REMINDER_TMPL)
+                      : templateActiveTab === 'urgent'
+                      ? (waBotConfig.urgentNoticeTemplate || DEFAULT_URGENT_TMPL)
+                      : templateActiveTab === 'receipt'
+                      ? waBotConfig.receiptTemplate
+                      : waBotConfig.isolirTemplate
+                  }
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (templateActiveTab === 'reminder') {
+                      setWaBotConfig({ ...waBotConfig, reminderTemplate: val });
+                    } else if (templateActiveTab === 'urgent') {
+                      setWaBotConfig({ ...waBotConfig, urgentNoticeTemplate: val });
+                    } else if (templateActiveTab === 'receipt') {
+                      setWaBotConfig({ ...waBotConfig, receiptTemplate: val });
+                    } else if (templateActiveTab === 'isolir') {
+                      setWaBotConfig({ ...waBotConfig, isolirTemplate: val });
+                    }
+                  }}
+                  className="w-full p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-100 font-mono text-xs leading-relaxed focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600/40 resize-y"
+                  placeholder="Ketik isi template pesan WhatsApp..."
+                />
+              </div>
+
+              {/* Tip Formatting & Save Action */}
+              <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800/80 text-[11px] text-zinc-400 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-zinc-500">Format WhatsApp:</span>
+                  <span><code className="text-emerald-400 font-mono">*tebal*</code></span>
+                  <span><code className="text-emerald-400 font-mono">_miring_</code></span>
+                  <span><code className="text-emerald-400 font-mono">~coret~</code></span>
+                  <span><code className="text-emerald-400 font-mono">```monospace```</code></span>
+                </div>
+                <span className="text-zinc-500">
+                  Placeholder otomatis dirender saat dikirimkan.
+                </span>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleSaveTemplates}
+                  className="px-5 py-2.5 text-xs font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 transition-all shadow-md shadow-emerald-950 flex items-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Simpan Perubahan Template ke Database</span>
+                </button>
+              </div>
+            </div>
+
+            {/* RIGHT: Live WhatsApp Chat Simulator */}
+            <div className="lg:col-span-5 p-5 rounded-2xl bg-zinc-900/70 border border-zinc-800 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-emerald-400" />
+                  <h4 className="text-sm font-bold text-white">
+                    Live Simulator Pesan WhatsApp
+                  </h4>
+                </div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950 text-emerald-400 border border-emerald-900">
+                  Evaluasi Real-Time
+                </span>
+              </div>
+
+              {/* Scenario Toggle */}
+              <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs">
+                <span className="text-zinc-400 text-[11px]">Pratinjau Data:</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewCustomerScenario('normal')}
+                    className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${
+                      previewCustomerScenario === 'normal'
+                        ? 'bg-emerald-600 text-white'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    Budi (Normal)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewCustomerScenario('overdue')}
+                    className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${
+                      previewCustomerScenario === 'overdue'
+                        ? 'bg-red-600 text-white'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    Ahmad (Overdue 3 Hari)
+                  </button>
+                </div>
+              </div>
+
+              {/* WhatsApp Phone Mockup Canvas */}
+              <div className="rounded-2xl border border-zinc-800 bg-[#0b141a] overflow-hidden shadow-xl">
+                {/* Mockup WhatsApp Header */}
+                <div className="px-4 py-3 bg-[#202c33] border-b border-zinc-800 flex items-center justify-between text-white">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-emerald-700 flex items-center justify-center font-bold text-xs text-white shadow">
+                      AN
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-white">
+                        <span>AnuwaniNet Official Bot</span>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400/20" />
+                      </div>
+                      <div className="text-[10px] text-emerald-400 font-mono">
+                        Akun Bisnis Resmi • Online
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-zinc-400">WhatsApp Web</span>
+                </div>
+
+                {/* Chat Bubble Area with subtle WhatsApp dark theme */}
+                <div className="p-4 bg-[#0b141a] min-h-[300px] max-h-[460px] overflow-y-auto space-y-3">
+                  {/* Date badge */}
+                  <div className="flex justify-center">
+                    <span className="px-2.5 py-0.5 rounded-md bg-[#182229] text-[10px] text-zinc-400 border border-zinc-800/60">
+                      HARI INI
+                    </span>
+                  </div>
+
+                  {/* Outgoing Message Bubble */}
+                  <div className="flex justify-end">
+                    <div className="max-w-[92%] p-3.5 rounded-2xl rounded-tr-sm bg-[#005c4b] text-white shadow-md relative space-y-2">
+                      <div className="whitespace-pre-wrap font-sans text-xs leading-relaxed break-words text-zinc-100">
+                        {evaluatedPreviewText || 'Template kosong...'}
+                      </div>
+                      <div className="flex items-center justify-end gap-1 text-[10px] text-emerald-200/80 pt-1">
+                        <span>10:45</span>
+                        <span className="text-sky-300 font-bold" title="Terkirim & Terbaca">✓✓</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Simulator Footer: Quick Test Action */}
+                <div className="p-3 bg-[#202c33] border-t border-zinc-800 space-y-2.5">
+                  <div className="text-[11px] font-semibold text-zinc-300">
+                    Kirim Uji Coba Template Ini:
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Nomor WhatsApp (0812xxx)"
+                      value={previewTestPhone}
+                      onChange={e => setPreviewTestPhone(e.target.value)}
+                      className="flex-1 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-700 text-xs text-white font-mono focus:border-emerald-500 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendTemplateTestWeb}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold flex items-center gap-1 transition-colors"
+                      title="Buka WhatsApp Web dengan pesan ini"
+                    >
+                      <Send className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>WA Web</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSendTemplateTestFonnte}
+                      disabled={isSendingPreviewTest}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1 transition-colors"
+                      title="Kirim otomatis menggunakan API Token Fonnte"
+                    >
+                      <span>{isSendingPreviewTest ? 'Mengirim...' : 'Kirim Bot'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================
+          SECTION 6: TUTORIAL & PANDUAN DEPLOYMENT HOSTING
       ============================================================ */}
       {activeSection === 'tutorial' && <HostingTutorialSection />}
 
@@ -2365,6 +3330,18 @@ export const PengaturanSuperadminView: React.FC<PengaturanSuperadminViewProps> =
           setWaBotConfig(DataService.getWhatsAppBotConfig());
           onRefreshData();
         }}
+      />
+
+      {/* Ruijie Reyee Cloud Hub: Sinkronisasi, Ekspor & Impor Modal */}
+      <RuijieImportModal
+        isOpen={showRuijieHubModal}
+        onClose={() => setShowRuijieHubModal(false)}
+        packages={DataService.getPackages()}
+        onImportSuccess={() => {
+          onRefreshData();
+          setRuijieConfig(DataService.getRuijieConfig());
+        }}
+        initialTab={ruijieHubInitialTab}
       />
     </div>
   );

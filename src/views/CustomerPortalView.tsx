@@ -356,7 +356,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
               <select
                 value={selectedCustomerId}
                 onChange={e => setSelectedCustomerId(e.target.value)}
-                className="bg-zinc-950 border border-zinc-700 text-white font-bold text-sm sm:text-base rounded-lg px-2.5 py-1 focus:outline-none focus:border-red-500 cursor-pointer"
+                className="w-full max-w-full sm:max-w-xs md:max-w-md bg-zinc-950 border border-zinc-700 text-white font-bold text-xs sm:text-sm rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-red-500 cursor-pointer truncate"
               >
                 {customers.map(c => (
                   <option key={c.id} value={c.id}>
@@ -534,9 +534,9 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
           </div>
         </div>
       ) : (
-        <div className="p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 flex items-center justify-between">
+        <div className="p-4 sm:p-5 rounded-2xl bg-zinc-900/60 border border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-full bg-emerald-950 text-emerald-400">
+            <div className="p-2.5 rounded-full bg-emerald-950 text-emerald-400 shrink-0">
               <CheckCircle2 className="w-6 h-6" />
             </div>
             <div>
@@ -546,7 +546,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
           </div>
           <button
             onClick={onNavigateToWaBot}
-            className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200"
+            className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 self-start sm:self-auto cursor-pointer"
           >
             Beli Voucher Tambahan
           </button>

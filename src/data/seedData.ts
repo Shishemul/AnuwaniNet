@@ -622,12 +622,29 @@ export const initialRuijieConfig: RuijieConfig = {
   secretKey: 'rj_sec_778120392819039129x88a',
   apiKey: 'rj_app_anuwani_882910398',
   apiSecret: 'rj_sec_778120392819039129x88a',
+  username: 'noc.admin@anuwani.net',
+  password: 'RuijieCloud#2026*',
   siteId: 'SITE-ANUWANI-01',
   autoIsolirDay: 20,
   gracePeriodDays: 2, // Isolir aktif otomatis tanggal 22 jika tanggal jatuh tempo 20
   isolirProfileName: 'ISOLIR_REDIRECT_WEB',
   normalProfileName: 'PPPOE_DEFAULT_PROFILE',
-  autoIsolirActive: true
+  autoIsolirActive: true,
+  autoSyncEnabled: true,
+  autoSyncIntervalMinutes: 30,
+  autoSyncFrequency: 'every_30_mins',
+  syncScope: 'all',
+  lastSyncAt: '15 Okt 2026, 10:30 WIB',
+  lastSuccessfulSyncAt: '15 Okt 2026, 10:30 WIB',
+  lastSyncTimestamp: 1791999000000,
+  lastSyncStatus: 'completed',
+  lastSyncSummary: {
+    customers: 10,
+    devices: 2,
+    vouchers: 6,
+    newlyAdded: 0,
+    updated: 5
+  }
 };
 
 export const initialSupabaseConfig: SupabaseConfig = {

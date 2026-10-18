@@ -23,8 +23,11 @@ import { SupabaseModal } from './components/modals/SupabaseModal';
 import { TransactionModal } from './components/modals/TransactionModal';
 import { DanaCheckoutModal } from './components/modals/DanaCheckoutModal';
 import { ProfileSettingsModal } from './components/modals/ProfileSettingsModal';
+import { NotificationCenterModal } from './components/modals/NotificationCenterModal';
+import { LayoutDashboard, Users, Receipt, Server, Menu, Wifi, Sliders } from 'lucide-react';
 
 import { DataService } from './services/dataService';
+import { RuijieService } from './services/ruijieService';
 import { getStoredSupabaseConfig, checkAndTriggerScheduledBackup } from './services/supabaseService';
 import { Customer, Bill, Transaction, Voucher, RuijieDevice, InternetPackage, WhatsAppMessageLog, DanaPaymentSession } from './types';
 
@@ -33,6 +36,8 @@ function MainApp() {
 
   // Navigation tab
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+  // Mobile Drawer State
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Core Data States
   const [customers, setCustomers] = useState<Customer[]>(() => DataService.getCustomers());
@@ -57,10 +62,12 @@ function MainApp() {
   const [showDanaModal, setShowDanaModal] = useState(false);
   const [selectedDanaSession, setSelectedDanaSession] = useState<DanaPaymentSession | null>(null);
   const [showProfileSettingsModal, setShowProfileSettingsModal] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
 
-  // Real-time listener for any transaction, bill, or voucher update & recurring backup check
+  // Real-time listener for any transaction, bill, or voucher update & recurring backup & Ruijie sync check
   useEffect(() => {
     checkAndTriggerScheduledBackup();
+    RuijieService.checkAndTriggerScheduledRuijieSync();
     // Load latest data from database if connected
     DataService.loadAllFromDatabase().then((loaded) => {
       if (loaded) refreshAllData();
@@ -73,7 +80,17 @@ function MainApp() {
     const unsubscribe = DataService.subscribe(() => {
       refreshAllData();
     });
-    return () => unsubscribe();
+
+    // Background interval scheduler runner (every 60 seconds)
+    const intervalId = setInterval(() => {
+      checkAndTriggerScheduledBackup();
+      RuijieService.checkAndTriggerScheduledRuijieSync();
+    }, 60000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(intervalId);
+    };
   }, []);
 
   // Sync activeTab when user role switches to customer or non-superadmin
@@ -151,6 +168,9 @@ function MainApp() {
         onOpenAuth={() => setShowAuthModal(true)}
         onOpenSupabase={() => setShowSupabaseModal(true)}
         onOpenProfileSettings={() => setShowProfileSettingsModal(true)}
+        onOpenNotificationCenter={() => setShowNotificationModal(true)}
+        onToggleMobileMenu={() => setIsMobileMenuOpen(prev => !prev)}
+        isMobileMenuOpen={isMobileMenuOpen}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         isSupabaseConnected={isSupabaseConnected}
@@ -164,10 +184,12 @@ function MainApp() {
           setActiveTab={setActiveTab}
           unpaidCount={unpaidCount}
           isolatedCount={isolatedCount}
+          mobileOpen={isMobileMenuOpen}
+          onCloseMobile={() => setIsMobileMenuOpen(false)}
         />
 
         {/* Viewport Content */}
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 min-w-0 p-3 sm:p-6 lg:p-8 pb-24 md:pb-8">
           {activeTab === 'dashboard' && (
             <DashboardView
               customers={customers}
@@ -267,6 +289,87 @@ function MainApp() {
         </main>
       </div>
 
+      {/* Mobile Floating Bottom Bar for Quick Touch Navigation */}
+      <nav
+        aria-label="Navigasi Bawah Mobile"
+        className="no-print fixed bottom-0 inset-x-0 z-40 bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800/90 px-2 py-1.5 flex items-center justify-around md:hidden shadow-2xl"
+      >
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('dashboard');
+            setIsMobileMenuOpen(false);
+          }}
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${
+            activeTab === 'dashboard' ? 'text-red-500 font-bold' : 'text-zinc-400 hover:text-white'
+          }`}
+        >
+          <LayoutDashboard className="w-5 h-5 mb-0.5" />
+          <span>Dashboard</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('pelanggan');
+            setIsMobileMenuOpen(false);
+          }}
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${
+            activeTab === 'pelanggan' ? 'text-red-500 font-bold' : 'text-zinc-400 hover:text-white'
+          }`}
+        >
+          <Users className="w-5 h-5 mb-0.5" />
+          <span>Pelanggan</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('tagihan');
+            setIsMobileMenuOpen(false);
+          }}
+          className={`relative flex flex-col items-center justify-center py-1 px-2.5 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${
+            activeTab === 'tagihan' ? 'text-red-500 font-bold' : 'text-zinc-400 hover:text-white'
+          }`}
+        >
+          <Receipt className="w-5 h-5 mb-0.5" />
+          <span>Tagihan</span>
+          {unpaidCount > 0 && (
+            <span className="absolute top-0 right-1 min-w-[15px] h-[15px] rounded-full bg-red-600 text-white font-mono text-[9px] font-bold flex items-center justify-center px-0.5">
+              {unpaidCount > 99 ? '99+' : unpaidCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('ruijie');
+            setIsMobileMenuOpen(false);
+          }}
+          className={`relative flex flex-col items-center justify-center py-1 px-2.5 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${
+            activeTab === 'ruijie' ? 'text-red-500 font-bold' : 'text-zinc-400 hover:text-white'
+          }`}
+        >
+          <Server className="w-5 h-5 mb-0.5" />
+          <span>Ruijie</span>
+          {isolatedCount > 0 && (
+            <span className="absolute top-0 right-1 w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setIsMobileMenuOpen(prev => !prev)}
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${
+            isMobileMenuOpen ? 'text-red-500 font-bold' : 'text-zinc-400 hover:text-white'
+          }`}
+        >
+          <Menu className="w-5 h-5 mb-0.5" />
+          <span>Menu</span>
+        </button>
+      </nav>
+
       {/* Global Modals */}
       <AuthModal
         isOpen={showAuthModal}
@@ -324,6 +427,12 @@ function MainApp() {
       <ProfileSettingsModal
         isOpen={showProfileSettingsModal}
         onClose={() => setShowProfileSettingsModal(false)}
+      />
+
+      <NotificationCenterModal
+        isOpen={showNotificationModal}
+        onClose={() => setShowNotificationModal(false)}
+        onNavigateToTab={(tab) => setActiveTab(tab)}
       />
     </div>
   );

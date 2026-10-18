@@ -117,9 +117,96 @@ export const UserManagementView: React.FC = () => {
         </div>
       </div>
 
-      {/* Users Table */}
+      {/* Users List: Mobile Cards + Desktop Table */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile View: Touch-Friendly User Cards (< md) */}
+        <div className="block md:hidden p-3 space-y-3">
+          {users.map(u => {
+            const isCurrent = currentUser?.id === u.id;
+            const isSuspended = u.status === 'suspended';
+
+            return (
+              <div
+                key={'user-card-' + u.id}
+                className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800/80 space-y-2.5 shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold text-white flex items-center gap-1.5">
+                      <span>{u.name}</span>
+                      {isCurrent && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-red-950 text-red-400 border border-red-900 font-mono">
+                          Anda
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] font-mono text-zinc-400">@{u.username}</div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => !isCurrent && toggleUserStatus(u.id)}
+                    disabled={isCurrent}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold border transition-colors ${
+                      isSuspended
+                        ? 'bg-rose-950/80 text-rose-300 border-rose-800'
+                        : 'bg-emerald-950/60 text-emerald-400 border-emerald-800/80'
+                    } ${isCurrent ? 'cursor-default' : 'hover:opacity-80 cursor-pointer'}`}
+                  >
+                    {isSuspended ? 'Ditangguhkan' : 'Aktif'}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-zinc-800/60">
+                  <div className="text-zinc-300 truncate flex items-center gap-1 font-mono">
+                    <Mail className="w-3 h-3 text-zinc-500 shrink-0" />
+                    <span className="truncate">{u.email}</span>
+                  </div>
+                  <div className="text-zinc-300 truncate flex items-center gap-1 font-mono">
+                    <Phone className="w-3 h-3 text-zinc-500 shrink-0" />
+                    <span className="truncate">{u.phone}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-800/60">
+                  <div className="flex items-center gap-2">
+                    <span className="text-zinc-400 text-xs">Peran:</span>
+                    <select
+                      value={u.role}
+                      disabled={isCurrent}
+                      onChange={e => updateUserRole(u.id, e.target.value as UserRole)}
+                      className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs font-semibold text-white focus:outline-none focus:border-red-600 disabled:opacity-60 cursor-pointer"
+                    >
+                      <option value="superadmin">Superadmin</option>
+                      <option value="admin">Admin</option>
+                      <option value="pelanggan">Pelanggan</option>
+                    </select>
+                  </div>
+
+                  {!isCurrent && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`Hapus akun ${u.name}?`)) {
+                          deleteUser(u.id);
+                          setNotice(`User ${u.name} dihapus.`);
+                          setTimeout(() => setNotice(null), 3000);
+                        }
+                      }}
+                      className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-red-400 hover:border-red-900 cursor-pointer"
+                      title="Hapus Pengguna"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop View: Full Table (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-zinc-800 bg-zinc-950/80 text-zinc-400 uppercase tracking-wider text-[11px]">

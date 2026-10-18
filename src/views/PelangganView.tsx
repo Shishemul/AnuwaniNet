@@ -26,7 +26,8 @@ import {
   Clock,
   Router,
   Download,
-  FileSpreadsheet
+  FileSpreadsheet,
+  RefreshCw
 } from 'lucide-react';
 import { RuijieService } from '../services/ruijieService';
 import { WhatsAppService } from '../services/whatsappService';
@@ -58,6 +59,8 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showRuijieImportModal, setShowRuijieImportModal] = useState(false);
+  const [ruijieModalTab, setRuijieModalTab] = useState<'sync' | 'import' | 'export' | 'template'>('import');
+  const [isSyncingRuijie, setIsSyncingRuijie] = useState(false);
   const [showExportCsvModal, setShowExportCsvModal] = useState(false);
   const [selectedCustomerForTemplate, setSelectedCustomerForTemplate] = useState<Customer | null>(null);
 
@@ -156,6 +159,26 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
     WhatsAppService.openWhatsAppUrl(c.phone, defaultMsg);
   };
 
+  const handleDirectSyncRuijie = async () => {
+    setIsSyncingRuijie(true);
+    setActionMessage('Menyinkronkan data dengan Ruijie Reyee Cloud...');
+    try {
+      const res = await RuijieService.executeRuijieCloudSync('manual');
+      setActionMessage(res.message);
+      onRefreshData();
+    } catch (e: any) {
+      setActionMessage('Gagal sinkronisasi Ruijie: ' + (e?.message || 'Terjadi kesalahan'));
+    } finally {
+      setIsSyncingRuijie(false);
+      setTimeout(() => setActionMessage(null), 5000);
+    }
+  };
+
+  const handleOpenRuijieModal = (tab: 'sync' | 'import' | 'export' | 'template') => {
+    setRuijieModalTab(tab);
+    setShowRuijieImportModal(true);
+  };
+
   const handleQuickExportCsv = () => {
     const target = isFiltered ? filteredCustomers : customers;
     if (target.length === 0) {
@@ -186,19 +209,41 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {/* Direct Auto-Sync with Ruijie Cloud */}
           <button
-            onClick={() => setShowRuijieImportModal(true)}
-            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-700 hover:border-red-600/60 text-white hover:bg-zinc-800 transition-colors shadow-sm"
-            title="Import dan sinkronisasi akun pelanggan PPPoE langsung dari router Ruijie Gateway / Reyee Cloud & simpan ke database"
+            onClick={handleDirectSyncRuijie}
+            disabled={isSyncingRuijie}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-500 text-white transition-all shadow-md shadow-red-950 cursor-pointer disabled:opacity-60"
+            title="Sinkronisasi otomatis dua arah akun pelanggan PPPoE dan voucher dengan Ruijie Reyee Cloud"
           >
-            <Router className="w-4 h-4 text-red-500" />
-            <span>Import dari Ruijie</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingRuijie ? 'animate-spin' : ''}`} />
+            <span>{isSyncingRuijie ? 'Menyinkronkan...' : '⚡ Sync Ruijie Cloud'}</span>
+          </button>
+
+          {/* Tarik / Import from Ruijie Gateway / Cloud */}
+          <button
+            onClick={() => handleOpenRuijieModal('import')}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-700 hover:border-sky-500 text-zinc-200 hover:text-white hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
+            title="Pindai live gateway atau upload file CSV/JSON Ruijie untuk menarik akun PPPoE"
+          >
+            <Router className="w-3.5 h-3.5 text-sky-400" />
+            <span>Tarik / Import Ruijie</span>
+          </button>
+
+          {/* Kirim / Export to Ruijie Gateway / Cloud */}
+          <button
+            onClick={() => handleOpenRuijieModal('export')}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-700 hover:border-emerald-500 text-zinc-200 hover:text-white hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
+            title="Kirim akun pelanggan ke Ruijie Cloud via API atau unduh CSV siap impor ke Ruijie eWeb"
+          >
+            <Send className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Export ke Ruijie</span>
           </button>
 
           {/* Export Database Pelanggan to CSV */}
           <button
             onClick={() => setShowExportCsvModal(true)}
-            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-950/80 border border-emerald-800/90 text-emerald-300 hover:text-white hover:bg-emerald-900 transition-colors shadow-sm cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-950/80 border border-emerald-800/90 text-emerald-300 hover:text-white hover:bg-emerald-900 transition-colors shadow-sm cursor-pointer"
             title="Ekspor seluruh database pelanggan atau hasil filter ke format file CSV untuk pelaporan & analisis spreadsheet"
           >
             <Download className="w-4 h-4 text-emerald-400" />
@@ -210,19 +255,19 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
               setSelectedCustomerForTemplate(customers[0] || null);
               setShowTemplateModal(true);
             }}
-            className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:bg-zinc-800 transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
             title="Kelola, simpan, dan pilih template pesan WhatsApp dengan placeholder dinamis"
           >
             <FileText className="w-4 h-4 text-emerald-400" />
-            <span>Template Pesan WA</span>
+            <span>Template WA</span>
           </button>
 
           <button
             onClick={onOpenAddCustomer}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors shadow-sm shadow-red-950"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors shadow-sm shadow-red-950 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Tambah Pelanggan Baru</span>
+            <span>+ Tambah Pelanggan</span>
           </button>
         </div>
       </div>
@@ -458,9 +503,176 @@ export const PelangganView: React.FC<PelangganViewProps> = ({
         </div>
       </div>
 
-      {/* Customers Table */}
+      {/* Customers List: Mobile Cards + Desktop Table */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile View: Touch-Friendly Customer Cards (< md) */}
+        <div className="block md:hidden p-3 space-y-3">
+          {filteredCustomers.length === 0 ? (
+            <div className="py-8 text-center text-zinc-500 space-y-2">
+              <Search className="w-8 h-8 mx-auto text-zinc-600" />
+              <div className="text-white font-medium text-xs">Tidak ditemukan data pelanggan</div>
+              {isFiltered && (
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 text-xs font-semibold text-white mt-1 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-red-400" />
+                  <span>Reset Filter</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            filteredCustomers.map(c => {
+              return (
+                <div
+                  key={'card-' + c.id}
+                  className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800/90 space-y-2.5 shadow-sm"
+                >
+                  {/* Card Header: Name, Code & Status */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-white text-sm">{c.name}</div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="font-mono text-[10px] text-red-400 font-bold bg-red-950/80 border border-red-900 px-1.5 py-0.2 rounded">
+                          {c.customerCode}
+                        </span>
+                        <span className="text-[10px] text-zinc-500 font-mono">Tgl {c.billingDay}</span>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0">
+                      {c.status === 'active' && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold text-emerald-400 bg-emerald-950/80 border border-emerald-900">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          Aktif
+                        </span>
+                      )}
+                      {c.status === 'isolated' && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold text-red-400 bg-red-950 border border-red-800">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                          Terisolir
+                        </span>
+                      )}
+                      {c.status === 'pending' && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold text-amber-400 bg-amber-950/80 border border-amber-900">
+                          Pending
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Details Grid */}
+                  <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-zinc-800/60 font-mono">
+                    <div className="p-1.5 rounded bg-zinc-900/60 border border-zinc-800/60">
+                      <div className="text-[9px] text-zinc-500 uppercase font-sans">Paket & Tarif</div>
+                      <div className="text-white font-sans font-medium truncate">{c.packageName}</div>
+                      <div className="text-zinc-300 font-bold tabular-nums">
+                        {WhatsAppService.formatRupiah(c.packagePrice)}
+                      </div>
+                    </div>
+
+                    <div className="p-1.5 rounded bg-zinc-900/60 border border-zinc-800/60">
+                      <div className="text-[9px] text-zinc-500 uppercase font-sans">PPPoE & IP</div>
+                      <div className="text-zinc-200 truncate">{c.pppoeUsername}</div>
+                      <div className="text-zinc-400 text-[10px] truncate">{c.ipAddress}</div>
+                    </div>
+                  </div>
+
+                  {/* Contact Info */}
+                  <div className="flex items-center justify-between text-xs text-zinc-300 pt-0.5">
+                    <div className="flex items-center gap-1 font-mono text-[11px] text-zinc-300">
+                      <Phone className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <span>{c.phone}</span>
+                    </div>
+                    {c.autoIsolirEnabled ? (
+                      <span className="text-[10px] text-emerald-400 font-mono">Auto-Isolir (H+2)</span>
+                    ) : (
+                      <span className="text-[10px] text-zinc-500 font-mono">VIP (No Isolir)</span>
+                    )}
+                  </div>
+
+                  {/* Actions Bar */}
+                  <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-zinc-800/60">
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSendWaDirect(c)}
+                        className="px-2.5 py-1.5 rounded-lg bg-emerald-950/70 border border-emerald-800 text-emerald-300 hover:bg-emerald-900 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                        title="Chat WhatsApp"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Chat WA</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCustomerForTemplate(c);
+                          setShowTemplateModal(true);
+                        }}
+                        className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-emerald-400 cursor-pointer"
+                        title="Template Pesan WA"
+                      >
+                        <FileText className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      {c.status === 'isolated' ? (
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreIsolir(c)}
+                          className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          Buka Isolir
+                        </button>
+                      ) : c.status === 'pending' ? (
+                        <button
+                          type="button"
+                          onClick={() => handleActivateAccount(c)}
+                          className="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          Aktifkan
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleManualIsolir(c)}
+                          className="p-1.5 rounded-lg bg-zinc-900 border border-red-900/60 text-red-400 hover:bg-red-950 cursor-pointer"
+                          title="Isolir Manual"
+                        >
+                          <ShieldAlert className="w-4 h-4" />
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => onEditCustomer(c)}
+                        className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white cursor-pointer"
+                        title="Edit Data Pelanggan"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCustomer(c.id, c.name)}
+                        className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-red-400 cursor-pointer"
+                        title="Hapus"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop View: Full Table (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-zinc-800 bg-zinc-950/80 text-zinc-400 uppercase tracking-wider text-[11px]">

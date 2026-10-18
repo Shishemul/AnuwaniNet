@@ -88,8 +88,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-800 p-6 space-y-4 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 animate-in fade-in duration-150">
+      <div className="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-800 p-4 sm:p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
           <div className="flex items-center gap-2">
             <Receipt className="w-5 h-5 text-red-500" />

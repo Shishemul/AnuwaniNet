@@ -28,8 +28,8 @@ export const PrintModal: React.FC<PrintModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
       <div className="w-full max-w-2xl rounded-2xl bg-zinc-900 border border-zinc-800 p-6 space-y-4 max-h-[95vh] overflow-y-auto">
         {/* Controls - Hidden during print */}
-        <div className="no-print flex items-center justify-between pb-3 border-b border-zinc-800">
-          <div className="flex items-center gap-3">
+        <div className="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-800">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <h2 className="text-base font-bold text-white flex items-center gap-2">
               <Printer className="w-5 h-5 text-red-500" />
               Cetak Kuitansi Pembayaran

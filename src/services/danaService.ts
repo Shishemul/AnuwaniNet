@@ -2,6 +2,7 @@ import { DanaGatewayConfig, DanaPaymentSession, Bill, Customer, Voucher } from '
 import { DataService } from './dataService';
 import { WhatsAppService } from './whatsappService';
 import { RuijieService } from './ruijieService';
+import { NotificationService } from './notificationService';
 
 const STORAGE_KEY_DANA_CONFIG = 'anw_dana_config_v1';
 const STORAGE_KEY_DANA_SESSIONS = 'anw_dana_sessions_v1';
@@ -131,6 +132,15 @@ export class DanaService {
           danaTransactionId: session.orderId
         });
 
+        // Log to Notification Center
+        NotificationService.logPaymentReceived({
+          billNumber: targetBill.billNumber,
+          customerName: targetBill.customerName,
+          amount: targetBill.amount,
+          paymentMethod: 'DANA E-Wallet & QRIS',
+          transactionId: session.orderId
+        });
+
         // Check if customer was isolated on Ruijie -> Auto-Unblock
         const customers = DataService.getCustomers();
         const cust = customers.find(c => c.id === targetBill.customerId);
@@ -197,6 +207,20 @@ export class DanaService {
         notes: `Beli Voucher Hotspot via DANA Payment Gateway (${session.itemTitle})`,
         whatsappNotificationSent: true,
         danaTransactionId: session.orderId
+      });
+
+      // Log to Notification Center
+      NotificationService.addNotification({
+        title: 'Pembelian Voucher DANA Berhasil',
+        message: `Voucher ${session.itemTitle} an. ${session.customerName} senilai Rp ${session.amount.toLocaleString('id-ID')} lunas diverifikasi via DANA (Kode: ${code}).`,
+        type: 'payment_received',
+        level: 'success',
+        metadata: {
+          customerName: session.customerName,
+          amount: session.amount,
+          paymentMethod: 'DANA E-Wallet Gateway',
+          transactionId: session.orderId
+        }
       });
 
       // Send WhatsApp with Voucher Code

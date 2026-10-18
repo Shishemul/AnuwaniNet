@@ -28,6 +28,7 @@ export class WhatsAppService {
     customer: Customer;
     bill?: Bill;
     customNote?: string;
+    daysOverdue?: number;
   }): string {
     const { customer, bill, customNote } = data;
     const amountVal = bill ? bill.amount : customer.packagePrice;
@@ -38,8 +39,54 @@ export class WhatsAppService {
     const isolirDateStr = `${customer.billingDay + 2} ${periodStr}`;
     const danaLink = `https://link.dana.id/pay?order=${invoiceNum}&amount=${amountVal}`;
 
+    const overdueDays = data.daysOverdue !== undefined
+      ? data.daysOverdue
+      : (bill && bill.dueDate ? Math.max(0, Math.ceil((Date.now() - new Date(bill.dueDate).getTime()) / (1000 * 60 * 60 * 24))) : 0);
+    const overdueLabel = overdueDays > 0 ? `TERLAMBAT ${overdueDays} HARI` : 'MELEWATI BATAS JATUH TEMPO';
+
+    const appSettings = DataService.getAppSettings();
+
     let result = templateText;
     const replacements: Record<string, string> = {
+      // User-requested double curly-brace format
+      '{{customer_name}}': customer.name,
+      '{{bill_amount}}': amountFormatted,
+      '{{due_date}}': dueDateStr,
+      '{{customer_code}}': customer.customerCode,
+      '{{customer_phone}}': customer.phone,
+      '{{customer_address}}': customer.address || '-',
+      '{{bill_number}}': invoiceNum,
+      '{{period}}': periodStr,
+      '{{package_name}}': customer.packageName,
+      '{{package_price}}': this.formatRupiah(customer.packagePrice),
+      '{{payment_link}}': danaLink,
+      '{{days_overdue}}': String(overdueDays),
+      '{{overdue_label}}': overdueLabel,
+      '{{isolir_date}}': isolirDateStr,
+      '{{status_koneksi}}': customer.status === 'active' ? 'AKTIF NORMAL' : customer.status === 'isolated' ? 'TERISOLIR' : 'PENDING',
+      '{{app_name}}': appSettings.appName || 'AnuwaniNet',
+      '{{bank_bca}}': appSettings.bcaAccount || '8291-039-112 a/n AnuwaniNet',
+      '{{bank_bri}}': appSettings.briAccount || '0021-01-082910-50-1 a/n AnuwaniNet',
+      '{{notes}}': customNote || '',
+      '{{current_date}}': new Date().toLocaleDateString('id-ID', { dateStyle: 'long' }),
+
+      // Single curly-brace format (Indonesian & English aliases)
+      '{customer_name}': customer.name,
+      '{bill_amount}': amountFormatted,
+      '{due_date}': dueDateStr,
+      '{customer_code}': customer.customerCode,
+      '{customer_phone}': customer.phone,
+      '{customer_address}': customer.address || '-',
+      '{bill_number}': invoiceNum,
+      '{period}': periodStr,
+      '{package_name}': customer.packageName,
+      '{package_price}': this.formatRupiah(customer.packagePrice),
+      '{payment_link}': danaLink,
+      '{days_overdue}': String(overdueDays),
+      '{overdue_label}': overdueLabel,
+      '{isolir_date}': isolirDateStr,
+
+      // Legacy single brace placeholders
       '{NAMA}': customer.name,
       '{ID_PELANGGAN}': customer.customerCode,
       '{NO_HP}': customer.phone,
@@ -61,17 +108,18 @@ export class WhatsAppService {
 
     Object.entries(replacements).forEach(([key, val]) => {
       // replace all instances case-insensitively
-      const regex = new RegExp(key.replace(/[{}]/g, '\\$&'), 'gi');
+      const escaped = key.replace(/[{}]/g, '\\$&');
+      const regex = new RegExp(escaped, 'gi');
       result = result.replace(regex, val);
     });
 
     return result;
   }
 
-  // 1. Template Tagihan Bulanan (Uses Active or Custom Template)
+  // 1. Template Tagihan Bulanan / Pengingat Pembayaran (Uses Active or Custom Template)
   static generateBillingMessage(bill: Bill, customer: Customer, customTemplateText?: string): string {
     const waConfig = DataService.getWhatsAppBotConfig();
-    const templateToUse = customTemplateText || waConfig.billingTemplate;
+    const templateToUse = customTemplateText || waConfig.reminderTemplate || waConfig.billingTemplate;
 
     if (templateToUse && (templateToUse.includes('{') || customTemplateText)) {
       return this.renderTemplate(templateToUse, { customer, bill });
@@ -99,6 +147,13 @@ export class WhatsAppService {
 
   // 1b. Template Peringatan Mendesak (Urgent Payment Reminder) dengan Warning Badge & Isolir Threat
   static generateUrgentPaymentMessage(bill: Bill, customer: Customer, daysOverdue?: number): string {
+    const waConfig = DataService.getWhatsAppBotConfig();
+    const templateToUse = waConfig.urgentNoticeTemplate;
+
+    if (templateToUse && (templateToUse.includes('{') || templateToUse.trim())) {
+      return this.renderTemplate(templateToUse, { customer, bill, daysOverdue });
+    }
+
     const danaLink = `https://link.dana.id/pay?order=${bill.billNumber}&amount=${bill.amount}`;
     const overdueLabel = daysOverdue && daysOverdue > 0 
       ? `TERLAMBAT ${daysOverdue} HARI` 

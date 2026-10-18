@@ -145,12 +145,30 @@ export interface RuijieConfig {
   secretKey: string; // Ruijie Reyee Cloud Secret Key
   apiKey?: string; // Backwards-compatible alias
   apiSecret?: string; // Backwards-compatible alias
+  username?: string; // Ruijie Reyee Cloud Account Username / Login
+  password?: string; // Ruijie Reyee Cloud Account Password
   siteId: string;
   autoIsolirDay: number; // default 20th
   gracePeriodDays: number; // default 2 days after due date
   isolirProfileName: string;
   normalProfileName: string;
   autoIsolirActive: boolean;
+  // Auto-synchronization with Ruijie Reyee Cloud
+  autoSyncEnabled?: boolean;
+  autoSyncIntervalMinutes?: number; // e.g. 15, 30, 60, 360, 720, 1440
+  autoSyncFrequency?: 'every_15_mins' | 'every_30_mins' | 'hourly' | 'every_6_hours' | 'every_12_hours' | 'daily';
+  syncScope?: 'all' | 'customers' | 'devices' | 'vouchers' | 'isolir_status';
+  lastSyncAt?: string;
+  lastSuccessfulSyncAt?: string;
+  lastSyncTimestamp?: number;
+  lastSyncStatus?: 'completed' | 'failed' | 'in_progress';
+  lastSyncSummary?: {
+    customers: number;
+    devices: number;
+    vouchers: number;
+    newlyAdded?: number;
+    updated?: number;
+  };
 }
 
 export interface DanaGatewayConfig {
@@ -260,6 +278,8 @@ export interface WhatsAppBotConfig {
   billingTemplate: string;
   receiptTemplate: string;
   isolirTemplate: string;
+  reminderTemplate?: string; // Customizable Payment Reminders template with {{customer_name}}, {{bill_amount}}, {{due_date}}
+  urgentNoticeTemplate?: string; // Customizable Urgent Notice template with {{customer_name}}, {{bill_amount}}, {{due_date}}
   customTemplates?: WhatsAppCustomTemplate[];
 }
 
@@ -271,5 +291,30 @@ export interface SystemSettingsDatabase {
   waBotConfig: WhatsAppBotConfig;
   updatedAt: string;
   updatedBy?: string;
+}
+
+export type NotificationEventType = 'auto_billing' | 'payment_received' | 'backup_status' | 'ruijie_isolation' | 'system';
+export type NotificationLevel = 'success' | 'info' | 'warning' | 'error';
+
+export interface SystemNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: NotificationEventType;
+  level: NotificationLevel;
+  timestamp: string;
+  timestampMs: number;
+  read: boolean;
+  metadata?: {
+    billNumber?: string;
+    customerName?: string;
+    amount?: number;
+    paymentMethod?: string;
+    backupSizeKb?: number;
+    recordsCount?: number;
+    triggerType?: 'manual' | 'scheduled';
+    period?: string;
+    [key: string]: any;
+  };
 }
 

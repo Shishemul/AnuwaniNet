@@ -650,7 +650,54 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Mobile View: Touch-Friendly Report Transaction Cards (< md) */}
+          <div className="block md:hidden p-3 space-y-2.5">
+            {displayedTransactions.length === 0 ? (
+              <div className="py-6 text-center text-zinc-500 font-sans text-xs">
+                Tidak ada transaksi yang cocok pada filter periode atau pencarian ini.
+              </div>
+            ) : (
+              displayedTransactions.map(t => {
+                const isIncome = t.category === 'income';
+
+                return (
+                  <div
+                    key={'rep-card-' + t.id}
+                    className="p-3 rounded-xl bg-zinc-950 border border-zinc-800/80 space-y-2 shadow-xs"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-mono font-bold text-white">{t.invoiceNumber}</span>
+                      <span className="text-[10px] text-zinc-400 font-mono">{t.date}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-white text-xs">{t.customerName}</div>
+                        <span className={`text-[10px] font-semibold uppercase ${isIncome ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {isIncome ? 'Pemasukan' : 'Pengeluaran'}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <div className={`font-mono font-bold text-sm tabular-nums ${isIncome ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {isIncome ? '+' : '-'}{WhatsAppService.formatRupiah(t.amount)}
+                        </div>
+                        <span className="text-[10px] text-zinc-400 uppercase font-mono">{t.paymentMethod}</span>
+                      </div>
+                    </div>
+
+                    {t.notes && (
+                      <div className="text-[10px] text-zinc-500 pt-1 border-t border-zinc-800/60 font-sans">
+                        Catatan: {t.notes}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Desktop View: Full Table (>= md) */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-zinc-800 text-zinc-400 uppercase tracking-wider text-[10px]">

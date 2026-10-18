@@ -3,6 +3,7 @@ import { Bill, Customer, Transaction, PaymentMethod } from '../../types';
 import { DataService } from '../../services/dataService';
 import { WhatsAppService } from '../../services/whatsappService';
 import { RuijieService } from '../../services/ruijieService';
+import { NotificationService } from '../../services/notificationService';
 import { X, CheckCircle2, Receipt, Send, ShieldCheck, DollarSign } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -66,6 +67,14 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
     };
     DataService.addTransaction(newTrx);
 
+    // Log to Notification Center
+    NotificationService.logPaymentReceived({
+      billNumber: bill.billNumber,
+      customerName: bill.customerName,
+      amount: bill.amount,
+      paymentMethod: paymentMethod === 'cash' ? 'Tunai (Kasir)' : paymentMethod === 'transfer' ? 'Transfer Bank' : paymentMethod === 'dana' ? 'DANA E-Wallet & QRIS' : paymentMethod
+    });
+
     // 3. Auto restore Ruijie isolation if customer is currently isolated
     if (customer && isCustomerIsolated && autoRestoreIsolir) {
       RuijieService.restoreCustomer(customer, 'Auto-pulihkan isolir setelah pembayaran tagihan ' + bill.billNumber);
@@ -93,8 +102,8 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-800 p-6 space-y-4 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 animate-in fade-in duration-150">
+      <div className="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-800 p-4 sm:p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
           <div className="flex items-center gap-2">
             <Receipt className="w-5 h-5 text-emerald-400" />

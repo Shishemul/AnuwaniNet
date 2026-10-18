@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseConfig } from '../types';
+import { NotificationService } from './notificationService';
 
 const STORAGE_KEY_SUPABASE = 'anuwani_supabase_config';
 
@@ -207,6 +208,15 @@ export async function executeDatabaseBackup(triggerType: 'manual' | 'scheduled' 
       }
     }
 
+    // Log to Notification Center
+    NotificationService.logBackupStatus({
+      success: true,
+      recordsCount: totalRecords,
+      sizeKb,
+      triggerType,
+      message: `Pencadangan database (${triggerType === 'scheduled' ? 'Terjadwal' : 'Manual'}) berhasil: ${totalRecords} data (${sizeKb} KB).`
+    });
+
     return {
       success: true,
       message: `Cadangan database berhasil diekspor (${totalRecords} catatan, ${sizeKb} KB)!`,
@@ -214,6 +224,13 @@ export async function executeDatabaseBackup(triggerType: 'manual' | 'scheduled' 
       dataDump: exportPayload
     };
   } catch (err: any) {
+    // Log failure to Notification Center
+    NotificationService.logBackupStatus({
+      success: false,
+      triggerType,
+      error: err?.message || 'Gagal membuat cadangan database.'
+    });
+
     return {
       success: false,
       message: err?.message || 'Gagal membuat cadangan database.'

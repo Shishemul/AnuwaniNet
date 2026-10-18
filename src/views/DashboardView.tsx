@@ -1351,7 +1351,64 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Mobile View: Touch-Friendly Transaction Cards (< md) */}
+        <div className="block md:hidden p-3 space-y-2.5">
+          {filteredTransactions.length === 0 ? (
+            <div className="py-6 text-center text-zinc-500 font-sans text-xs">
+              Tidak ada transaksi yang cocok dengan filter.
+            </div>
+          ) : (
+            filteredTransactions.slice(0, 10).map(t => {
+              const isIncome = t.category === 'income';
+              const isDana = t.paymentMethod === 'dana';
+
+              return (
+                <div
+                  key={'trx-mob-' + t.id}
+                  className="p-3 rounded-xl bg-zinc-950 border border-zinc-800/80 space-y-2 shadow-xs"
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-mono font-bold text-white">{t.invoiceNumber}</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">{t.date}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold text-white text-xs">{t.customerName}</div>
+                      <div className="text-[10px] text-zinc-400 capitalize">{t.type.replace('_', ' ')}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`font-mono font-bold text-sm tabular-nums ${isIncome ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {isIncome ? '+' : '-'}{WhatsAppService.formatRupiah(t.amount)}
+                      </div>
+                      <div className="text-[10px]">
+                        {isDana ? (
+                          <span className="text-sky-400 font-semibold font-mono">DANA E-Wallet</span>
+                        ) : (
+                          <span className="text-zinc-400 uppercase font-mono">{t.paymentMethod}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-zinc-800/60 text-[10px]">
+                    <span className="text-emerald-400 font-medium">Selesai (Kasir)</span>
+                    {t.whatsappNotificationSent ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-400 font-sans">
+                        <CheckCircle2 className="w-3 h-3" /> Notifikasi WA Terkirim
+                      </span>
+                    ) : (
+                      <span className="text-zinc-500">Tanpa Notifikasi WA</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop View: Full Table (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-zinc-800 text-zinc-400 uppercase tracking-wider text-[11px]">

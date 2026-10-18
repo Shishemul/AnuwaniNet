@@ -20,7 +20,14 @@ import {
   Network,
   Download,
   Zap,
-  Router
+  Router,
+  User,
+  Lock,
+  Eye,
+  EyeOff,
+  Clock,
+  SlidersHorizontal,
+  FileSpreadsheet
 } from 'lucide-react';
 import { RuijieService, RuijieExecutionLog } from '../services/ruijieService';
 import { DataService } from '../services/dataService';
@@ -51,11 +58,36 @@ export const RuijieView: React.FC<RuijieViewProps> = ({
   const [isSyncing, setIsSyncing] = useState(false);
   const [isImportingRealData, setIsImportingRealData] = useState(false);
   const [showRuijieImportModal, setShowRuijieImportModal] = useState(false);
+  const [ruijieHubTab, setRuijieHubTab] = useState<'sync' | 'import' | 'export' | 'template'>('sync');
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   const isolatedCustomers = customers.filter(c => c.status === 'isolated');
   const activeCustomers = customers.filter(c => c.status === 'active');
   const availablePackages = packages || DataService.getPackages();
+
+  const handleOpenRuijieHub = (tab: 'sync' | 'import' | 'export' | 'template') => {
+    setRuijieHubTab(tab);
+    setShowRuijieImportModal(true);
+  };
+
+  const handleSyncCloudNow = async () => {
+    setIsSyncingCloud(true);
+    setActionNotice('Menjalankan auto-sinkronisasi dua arah dengan Ruijie Reyee Cloud...');
+    try {
+      const res = await RuijieService.executeRuijieCloudSync('manual');
+      setConfig(DataService.getRuijieConfig());
+      setLogs(RuijieService.getLogs());
+      onRefreshData();
+      setActionNotice(res.message);
+    } catch (err: any) {
+      setActionNotice('Gagal sinkronisasi Ruijie: ' + (err?.message || 'Terjadi kesalahan'));
+    } finally {
+      setIsSyncingCloud(false);
+      setTimeout(() => setActionNotice(null), 5000);
+    }
+  };
 
   const handleImportRealDataDirect = async () => {
     setIsImportingRealData(true);
@@ -157,11 +189,42 @@ export const RuijieView: React.FC<RuijieViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* 1-Click Real Data Import from Ruijie Gateway into Database */}
+          {/* Quick Auto-Sync Cloud */}
+          <button
+            onClick={handleSyncCloudNow}
+            disabled={isSyncingCloud}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-500 text-white transition-all shadow-md shadow-red-950 cursor-pointer disabled:opacity-60"
+            title="Sinkronisasi dua arah dengan Ruijie Reyee Cloud (PPPoE, Router Gateway, dan Voucher Hotspot)"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+            <span>{isSyncingCloud ? 'Menyinkronkan...' : '⚡ Sync Ruijie Cloud'}</span>
+          </button>
+
+          {/* Tarik / Import Ruijie */}
+          <button
+            onClick={() => handleOpenRuijieHub('import')}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-700 hover:border-sky-500 text-white hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
+            title="Tarik data pelanggan dari router Ruijie Gateway atau unggah berkas CSV/JSON"
+          >
+            <Download className="w-3.5 h-3.5 text-sky-400" />
+            <span>Tarik / Import Data</span>
+          </button>
+
+          {/* Kirim / Export Ruijie */}
+          <button
+            onClick={() => handleOpenRuijieHub('export')}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-700 hover:border-emerald-500 text-white hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
+            title="Kirim akun PPPoE dan voucher ke Ruijie Cloud API atau unduh file CSV/JSON"
+          >
+            <Send className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Kirim / Export Data</span>
+          </button>
+
+          {/* 1-Click Fast Import */}
           <button
             onClick={handleImportRealDataDirect}
             disabled={isImportingRealData}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-950 border border-emerald-850 text-emerald-300 hover:bg-emerald-900 transition-colors shadow-sm cursor-pointer disabled:opacity-60"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-950 border border-emerald-800 text-emerald-300 hover:bg-emerald-900 transition-colors shadow-sm cursor-pointer disabled:opacity-60"
             title="Tarik langsung seluruh data real pelanggan PPPoE dari Ruijie Gateway EG3250 dan simpan ke Database dalam 1-Klik"
           >
             {isImportingRealData ? (
@@ -169,37 +232,28 @@ export const RuijieView: React.FC<RuijieViewProps> = ({
             ) : (
               <Zap className="w-3.5 h-3.5 text-emerald-400" />
             )}
-            <span>1-Klik Tarik Real Data Ruijie</span>
-          </button>
-
-          {/* Detailed Ruijie Import Modal (Scan / Upload / CSV) */}
-          <button
-            onClick={() => setShowRuijieImportModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
-            title="Buka panel pemindaian gateway Ruijie atau upload file eWeb CSV/JSON"
-          >
-            <Router className="w-3.5 h-3.5 text-red-500" />
-            <span>Import Pelanggan Ruijie</span>
+            <span>1-Klik Real Data</span>
           </button>
 
           {isSuperadmin && (
             <button
               onClick={handleSyncVouchers}
               disabled={isSyncing}
-              className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:bg-zinc-800 transition-colors shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
               title="Sinkronisasi kode voucher hotspot ke Cloud Ruijie Reyee"
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-red-500 ${isSyncing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>Sinkron Voucher</span>
             </button>
           )}
 
           <button
             onClick={handleRunAutoIsolirNow}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors shadow-sm shadow-red-950"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 hover:border-red-600/80 text-red-400 hover:text-white transition-colors cursor-pointer"
+            title="Jalankan isolir otomatis tagihan tertunggak sekarang"
           >
-            <ShieldAlert className="w-4 h-4" />
-            <span>Jalankan Auto Isolir</span>
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>Auto Isolir</span>
           </button>
         </div>
       </div>
@@ -210,6 +264,150 @@ export const RuijieView: React.FC<RuijieViewProps> = ({
           <span>{actionNotice}</span>
         </div>
       )}
+
+      {/* Hero Card: Auto-Sinkronisasi Terjadwal dengan Ruijie Cloud */}
+      <div className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-zinc-800">
+          <div className="flex items-center gap-2.5">
+            <RefreshCw className="w-5 h-5 text-red-500" />
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">
+                  Auto-Sinkronisasi Data Ruijie Cloud & Hub Gateway
+                </h3>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border flex items-center gap-1 ${
+                  config.autoSyncEnabled !== false
+                    ? 'bg-emerald-950 text-emerald-300 border-emerald-900'
+                    : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                }`}>
+                  <CheckCircle className="w-3 h-3 text-emerald-400" />
+                  {config.autoSyncEnabled !== false ? 'AUTO-SYNC AKTIF' : 'AUTO-SYNC NONAKTIF'}
+                </span>
+              </div>
+              <p className="text-zinc-400 text-[11px] mt-0.5">
+                Sistem otomatis menyelaraskan akun pelanggan PPPoE, router gateway online, dan pool voucher hotspot secara berkala.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => handleOpenRuijieHub('sync')}
+              className="px-3.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-zinc-400" />
+              <span>Detail Cloud Hub</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSyncCloudNow}
+              disabled={isSyncingCloud}
+              className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+              <span>{isSyncingCloud ? 'Menyinkronkan...' : 'Sinkronkan Sekarang'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Metrik & Status Terakhir Sinkronisasi */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5">
+          <div className="md:col-span-5 p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-zinc-400 font-medium">Timestamp Sinkronisasi Terakhir:</span>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-900">
+                CLOUD SYNCED
+              </span>
+            </div>
+            <div className="text-lg sm:text-xl font-mono font-extrabold text-white text-emerald-400">
+              {config.lastSuccessfulSyncAt || config.lastSyncAt || '15 Okt 2026, 10:30 WIB'}
+            </div>
+            <div className="text-[11px] text-zinc-400 flex items-center gap-1.5 pt-0.5">
+              <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>Interval Rutin: <strong className="text-zinc-200 font-mono">{config.autoSyncIntervalMinutes || 30} Menit</strong> per Siklus</span>
+            </div>
+          </div>
+
+          <div className="md:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div
+              onClick={() => handleOpenRuijieHub('import')}
+              className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 cursor-pointer transition-colors flex flex-col justify-between"
+              title="Klik untuk membuka penarikan data pelanggan PPPoE dari Ruijie"
+            >
+              <span className="text-zinc-500 text-[10px] font-semibold uppercase">Akun PPPoE</span>
+              <span className="text-lg font-mono font-bold text-white mt-0.5">
+                {customers.length} User
+              </span>
+              <span className="text-[10px] text-emerald-400 font-mono">Tarik / Import ↗</span>
+            </div>
+
+            <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 flex flex-col justify-between">
+              <span className="text-zinc-500 text-[10px] font-semibold uppercase">Gateway Online</span>
+              <span className="text-lg font-mono font-bold text-white mt-0.5">
+                {devices.length} Unit
+              </span>
+              <span className="text-[10px] text-sky-400 font-mono">RG-EG3250</span>
+            </div>
+
+            <div
+              onClick={() => handleOpenRuijieHub('export')}
+              className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 cursor-pointer transition-colors flex flex-col justify-between"
+              title="Klik untuk membuka ekspor data ke Ruijie Cloud"
+            >
+              <span className="text-zinc-500 text-[10px] font-semibold uppercase">Voucher Hotspot</span>
+              <span className="text-lg font-mono font-bold text-white mt-0.5">
+                {DataService.getVouchers().length} Pool
+              </span>
+              <span className="text-[10px] text-amber-400 font-mono">Kirim / Export ↗</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Interval Preset Selector */}
+        <div className="pt-2 border-t border-zinc-800/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Clock className="w-3.5 h-3.5 text-zinc-400" />
+            <span className="text-zinc-400 text-xs font-medium">Ubah Frekuensi Interval Auto-Sync:</span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {[
+              { mins: 15, label: '15 M' },
+              { mins: 30, label: '30 M (Rek)' },
+              { mins: 60, label: '1 Jam' },
+              { mins: 360, label: '6 Jam' },
+              { mins: 720, label: '12 Jam' },
+              { mins: 1440, label: '24 Jam' }
+            ].map(item => {
+              const isSelected = config.autoSyncIntervalMinutes === item.mins;
+              return (
+                <button
+                  key={item.mins}
+                  type="button"
+                  onClick={() => {
+                    const updated = {
+                      ...config,
+                      autoSyncIntervalMinutes: item.mins
+                    };
+                    setConfig(updated);
+                    DataService.saveRuijieConfig(updated);
+                    setActionNotice(`Interval auto-sync Ruijie Cloud diubah ke ${item.label}!`);
+                    setTimeout(() => setActionNotice(null), 3000);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-red-950 text-white border border-red-600 shadow-sm'
+                      : 'bg-zinc-950 text-zinc-400 border border-zinc-800 hover:text-white'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
       {/* Visual Topology Representation */}
       <NetworkTopologyView
@@ -370,6 +568,45 @@ export const RuijieView: React.FC<RuijieViewProps> = ({
                 />
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                <div>
+                  <label className="block text-zinc-400 mb-1 flex items-center gap-1">
+                    <User className="w-3 h-3 text-red-400" />
+                    <span>Username Ruijie Cloud</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="noc.admin@anuwani.net"
+                    value={config.username || ''}
+                    onChange={e => setConfig({ ...config, username: e.target.value })}
+                    className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1 flex items-center gap-1">
+                    <Lock className="w-3 h-3 text-red-400" />
+                    <span>Password Ruijie Cloud</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Kata sandi akun cloud"
+                      value={config.password || ''}
+                      onChange={e => setConfig({ ...config, password: e.target.value })}
+                      className="w-full px-3 py-1.5 pr-8 rounded-lg bg-zinc-950 border border-zinc-800 text-white font-mono text-[11px]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors p-0.5"
+                    >
+                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-zinc-400 mb-1">Cloud Open API URL</label>
                 <input
@@ -500,6 +737,7 @@ export const RuijieView: React.FC<RuijieViewProps> = ({
         isOpen={showRuijieImportModal}
         onClose={() => setShowRuijieImportModal(false)}
         packages={availablePackages}
+        initialTab={ruijieHubTab}
         onImportSuccess={count => {
           setLogs(RuijieService.getLogs());
           onRefreshData();
